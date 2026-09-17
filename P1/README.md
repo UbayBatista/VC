@@ -38,9 +38,7 @@ Sugerencia de cambio del algoritmo:
 
 Vídeo demostrativo:
 
-<p align="center">
-<video src="videos/min_max_en_fotograma_demo.mp4" width="300" controls>
-</p>
+https://github.com/user-attachments/assets/2be35af5-6059-43bd-8acf-e124835c12f3
 
 Conversación con la Inteligencia Artificial: https://share.gemini.google/TMVdLhjfAJ9t
 
