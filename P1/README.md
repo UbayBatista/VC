@@ -66,9 +66,7 @@ Para el manejo de la demo que se muestra en esta tarea, se pueden usar los boton
 
 Vídeo demostrativo:
 
-<p align="center">
-<video src="videos/inversion_color_demo.mp4" width="300" controls>
-</p>
+https://github.com/user-attachments/assets/38e9a919-cd22-4b7f-8eca-91ec1f83af45
 
 Conversación con la Inteligencia Artificial: https://share.gemini.google/odFoPvnl4YnD
 
