@@ -272,6 +272,8 @@ elif game_state == "CAPTURING":
 
 Vídeo demo:
 
+[▶️ Ver vídeo del funcionamiento](https://drive.google.com/file/d/1sWQoSc4HZoF75jCzQOqRraK5ZUSEFf7t/view?usp=sharing)
+
 ## Tarea Adicional
 
 Tras ver los vídeos se nos ocurrió implementar un juego de memoria de secuencia; sin embargo, tras varias conversaciones con la Inteligencia Artificial comprendimos que la complejidad excedía el alcance estimado para este trabajo, por lo que decidimos utilizar las soluciones que nos habían aportado las inteligencias artificiales para hacer una comparativa. Para ello, hemos decidido comparar dos métodos de detección de posición: el primero es en base al color, con un detector de color por HSV; el segundo, detecta bordes y establece la posición más alta del jugador con la premisa de que esta debe corresponder a la mano que se alza.
@@ -280,7 +282,11 @@ Una vez establecida la premisa, explicamos en qué consiste el juego: se trata d
 
 Vídeo demostrativo por detección de color:
 
+[▶️ Ver vídeo del funcionamiento](https://drive.google.com/file/d/1Gh_F75WlLwHuBRsfJHyQE7caxH4g1E6V/view?usp=sharing)
+
 Vídeo demostrativo por detección de bordes:
+
+[▶️ Ver vídeo del funcionamiento](https://drive.google.com/file/d/1-rjTrkX_t8R1Sw2c7Pdjp4prMePaA26y/view?usp=sharing)
 
 Tras ver el resultado, podemos deducir que el código que mejores resultados ofrece para el objetivo del juego es el de detección de colores porque el detector de bordes aplica de mejor manera para imágenes estáticas. Sin embargo, al añadir movimiento pierde precisión y salta de una posición a otra, ofreciendo una peor experiencia que el detector de colores.
 
