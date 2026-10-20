@@ -215,6 +215,10 @@ def get_amount(contours, binary_image, hsv):
     print(f'Valor en la mesa: {np.median(amounts_read)}')
 ~~~
 
+Vídeo demo:
+
+[▶️ Ver vídeo del funcionamiento](https://drive.google.com/file/d/1tWXhc6PlrUwpVhcqW-xvLlX8S9mNnN9S/view?usp=sharing)
+
 ## Tarea 2
 
 ### Conversaciones con la Inteligencia Artificial
