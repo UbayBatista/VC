@@ -16,6 +16,7 @@ def segment(frame):
 
     # 2. Lab en uint8 -> float32 para poder restar con signo
     lab = cv2.cvtColor(blurred, cv2.COLOR_BGR2LAB).astype(np.float32)
+    l = lab[:, :, 0]
     a = lab[:, :, 1]
     b = lab[:, :, 2]
 
@@ -25,11 +26,14 @@ def segment(frame):
     border[-BORDER_PX:, :] = True
     border[:, :BORDER_PX] = True
     border[:, -BORDER_PX:] = True
+    l_bg = np.median(l[border])
     a_bg = np.median(a[border])
     b_bg = np.median(b[border])
 
     # 4. Distancia de crominancia al fondo
-    dist = cv2.magnitude(a - a_bg, b - b_bg)
+    dist_chroma = cv2.magnitude(a - a_bg, b - b_bg)
+    dist_l = np.maximum(np.abs(l - l_bg) - L_DEADZONE, 0) * L_WEIGHT
+    dist = np.maximum(dist_chroma, dist_l)
 
     # 5. Escalado con rango fijo a uint8
     dist_u8 = np.clip(dist * (255.0 / DIST_MAX), 0, 255).astype(np.uint8)
@@ -184,7 +188,7 @@ def get_amount(contours, binary_image, hsv):
         if radius > 20:
             short_mm, long_mm, aspect = get_bill_shape(contour)
 
-            # Utilizamos la relación de aspecto para evitar leer elementos que no sean similares a billetes
+            # Utilizamos la relación de aspectos para evitar leer elementos que no sean similares a billetes
             if aspect < 1.7 or aspect > 2.05:
                 continue
 
@@ -195,7 +199,7 @@ def get_amount(contours, binary_image, hsv):
                 print(f'Billete: {value}€ - Tamaño: {short_mm:.2f}x{long_mm:.2f}mm')
             else:
                 print(f'Billete desconocido - Tamaño: {short_mm:.2f}x{long_mm:.2f}mm')
-        else:
+        elif radius > 7:
             # Establecemos el grupo al que pertenece la moneda en base a su color
             measurements = meassure_color(hsv, mask, distance_image, distance)
             group = classify_group(*measurements)
