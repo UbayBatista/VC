@@ -172,7 +172,7 @@ def get_bill_shape(contour):
 Por último, se modificó la función original de `get_amount` para clasificar como billete aquellos contornos cuyo radio supere los 0.2 mm, resultando de la siguiente forma:
 
 ~~~python
-def get_amount(contours, binary_image, hsv):
+def get_amount(contours, binary_image, hsv, frame, title_position, debugging):
     total_amount = 0
     for index, contour in enumerate(contours):
         distance = find_distance_from_center_px(contour, binary_image, index)
@@ -185,6 +185,7 @@ def get_amount(contours, binary_image, hsv):
         # Calculamos el radio en mm a partir del valor máximo de la transformada de distancia y el tamaño de pixel
         radius = distance * pixel_size
 
+        text = ""
         if radius > 20:
             short_mm, long_mm, aspect = get_bill_shape(contour)
 
@@ -196,9 +197,17 @@ def get_amount(contours, binary_image, hsv):
 
             if value is not None:
                 total_amount += value
-                print(f'Billete: {value}€ - Tamaño: {short_mm:.2f}x{long_mm:.2f}mm')
+                if debugging:
+                    text = f'Billete: {value}€ - Tamaño: {short_mm:.2f}x{long_mm:.2f}mm'
+                else:
+                    text = f"Billete: {value}€"
             else:
-                print(f'Billete desconocido - Tamaño: {short_mm:.2f}x{long_mm:.2f}mm')
+                if debugging:
+                    text = f'Billete desconocido - Tamaño: {short_mm:.2f}x{long_mm:.2f}mm'
+                else:
+                    text = "Billete desconocido"
+            draw_text(frame, text, font, 0.5, (0,0,0), thickness, top_margin, get_text_position(contour))
+
         elif radius > 7:
             # Establecemos el grupo al que pertenece la moneda en base a su color
             measurements = meassure_color(hsv, mask, distance_image, distance)
@@ -209,19 +218,34 @@ def get_amount(contours, binary_image, hsv):
                 value = classify(radius, group)
                 if value is not None:
                     total_amount += value
-                    print(f'Moneda: {value}€ - Radio: {radius:.2f}mm - Grupo: {group}')
+                    if debugging:
+                        text = f'Moneda: {value}€ - Radio: {radius:.2f}mm - Grupo: {group}'
+                    else:
+                        text = f'Moneda: {value}€'
                 else:
-                    print(f'Moneda desconocida - Radio: {radius:.2f}mm - Grupo: {group}')
+                    if debugging:
+                        text = f'Moneda desconocida - Radio: {radius:.2f}mm - Grupo: {group}'
+                    else:
+                        text = "Moneda desconocida"
+                draw_text(frame, text, font, 0.5, (0,0,0), thickness, top_margin, get_text_position(contour))
+                
 
     # Añadimos el total de la mesa a la lista de lecturas
     amounts_read.append(total_amount)
     # Se muestra el valor de la mesa como la mediana de las lecturas obtenidas
-    print(f'Valor en la mesa: {np.median(amounts_read)}')
+    text = f'Valor en la mesa: {np.median(amounts_read)}'
+    draw_text(frame, text, font, font_scale, (0,0,0), thickness, top_margin, title_position)
 ~~~
+
+Obteniendo el siguiente resultado para la imagen controlada:
+
+<p align="center">
+<img src="images/Monedas_resultado.jpg" width="300">
+</p>
 
 Vídeo demo:
 
-[▶️ Ver vídeo del funcionamiento](https://drive.google.com/file/d/1tWXhc6PlrUwpVhcqW-xvLlX8S9mNnN9S/view?usp=sharing)
+[▶️ Enlace al vídeo sin editar](https://drive.google.com/file/d/1riPQ9wxREGVB4UJ-HbIrjcS_uZKxu1Mp/view?usp=sharing)
 
 ## Tarea 2
 
