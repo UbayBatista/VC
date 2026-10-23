@@ -245,6 +245,8 @@ Obteniendo el siguiente resultado para la imagen controlada:
 
 Vídeo demo:
 
+https://github.com/user-attachments/assets/63500277-c88c-4d18-85c4-58a7bdf69330
+
 [▶️ Enlace al vídeo sin editar](https://drive.google.com/file/d/1riPQ9wxREGVB4UJ-HbIrjcS_uZKxu1Mp/view?usp=sharing)
 
 ## Tarea 2
