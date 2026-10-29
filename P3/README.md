@@ -257,6 +257,8 @@ https://github.com/user-attachments/assets/63500277-c88c-4d18-85c4-58a7bdf69330
 
 El objetivo de esta tarea es detectar y clasificar las partículas de tres clases —fragmentos (`FRA`), pellets (`PEL`) y alquitrán (`TAR`)— en imágenes, sin utilizar modelos de aprendizaje profundo. El trabajo parte de las tres imágenes completas de entrenamiento y de una subimagen de ejemplo por clase. A partir de ellas se desarrolla una segmentación clásica, se calculan características de forma, color y textura, y se comparan varios clasificadores. Finalmente, se valida la detección y clasificación sobre `MPs_test.jpg`, usando las cajas delimitadoras de `MPs_test_bbs.csv` como referencia.
 
+**Requisito previo**: Para la correcta ejecución del código, es necesario instalar la librería `scikit-image` (la cual proporciona métodos avanzados de procesamiento como Sauvola y LBP). Se puede instalar ejecutando: `pip install scikit-image`.
+
 El procedimiento seguido en el cuaderno [VC_P3.ipynb](./VC_P3.ipynb) es:
 
 1. Cargar las imágenes, fijar los parámetros comunes y verificar sus dimensiones.
@@ -284,8 +286,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# Importación de Scikit-Image para umbralización adaptativa y análisis de textura
 from skimage.filters import threshold_sauvola
 from skimage.feature import local_binary_pattern
+
+# Herramientas de Scikit-Learn para Machine Learning
 from sklearn.decomposition import PCA
 from sklearn.metrics import (
     accuracy_score,
@@ -309,6 +314,7 @@ Las imágenes de entrenamiento son `fragment-03-olympus-10-01-2020.JPG`, `pellet
 Se fija la semilla aleatoria en 13 para hacer reproducibles las operaciones aleatorias. Las imágenes completas cuya dimensión mayor supera 1200 px se reducen al 25 %; las demás se conservan a su tamaño original. La ventana de Sauvola es de 51 píxeles y su parámetro `k` es 0.06. Para filtrar contornos se usan áreas entre 42 y 3500 px² en imágenes completas y entre 24 y 3500 px² en subimágenes. El umbral de IoU para considerar emparejada una detección es 0.30.
 
 ```python
+# Diccionarios con las rutas a las imágenes de entrenamiento y subimágenes
 FULL_TRAIN_PATHS = {
     "FRA": "fragment-03-olympus-10-01-2020.JPG",
     "PEL": "pellet-03-olympus-10-01-2020.JPG",
@@ -320,16 +326,17 @@ SUB_TRAIN_PATHS = {
     "TAR": "TAR.png",
 }
 
+# Constantes de configuración global
 TEST_IMG_FILE = "MPs_test.jpg"
 TEST_CSV_FILE = "MPs_test_bbs.csv"
 SEED_VALUE = 13
-TRAIN_RESIZE_SCALE = 0.25
-SAUVOLA_WINDOW_SIZE = 51
-SAUVOLA_K_PARAM = 0.06
-AREA_LIMITS_FULL = (42, 3500)
-AREA_LIMITS_SUB = (24, 3500)
-AUGMENTATION_COUNT = 5
-MIN_IOU_THRESHOLD = 0.30
+TRAIN_RESIZE_SCALE = 0.25       # Reducción de imágenes grandes al 25%
+SAUVOLA_WINDOW_SIZE = 51        # Tamaño de ventana para el umbral adaptativo
+SAUVOLA_K_PARAM = 0.06          # Parámetro de sensibilidad del método de Sauvola.
+AREA_LIMITS_FULL = (42, 3500)   # Filtro de tamaño para descartar ruido (completa)
+AREA_LIMITS_SUB = (24, 3500)    # Filtro de tamaño para descartar ruido (recortes)
+AUGMENTATION_COUNT = 5          # Versiones sintéticas generadas por imagen
+MIN_IOU_THRESHOLD = 0.30        # Porcentaje de solape exigido en el testing
 
 np.random.seed(SEED_VALUE)
 ```
@@ -359,15 +366,18 @@ La segmentación combina varias heurísticas para compensar las variaciones de i
 El siguiente extracto muestra la estimación de fondo y la combinación conservadora de Sauvola con Otsu:
 
 ```python
+# Función para crear un "fondo limpio artificial" eliminando los plásticos
 def estimate_clean_lab_background(bgr_img):
-    filtered = cv2.bilateralFilter(bgr_img, 7, 40, 7)
+    filtered = cv2.bilateralFilter(bgr_img, 7, 40, 7)   # Suaviza manteniendo bordes
     lab = cv2.cvtColor(filtered, cv2.COLOR_BGR2LAB).astype(np.float32)
 
+    # Filtro mediana gigante (61) para borrar las partículas y quedarnos con el fondo
     median_bg = cv2.merge([
         cv2.medianBlur(ch, 61)
         for ch in cv2.split(lab.astype(np.uint8))
     ]).astype(np.float32)
 
+    # Compara la imagen original con el fondo limpio para crear una pseudo-transparencia
     prelim_dist = compute_channel_distance(lab, median_bg)
     prelim_mask = (prelim_dist > 8.0).astype(np.uint8)
     dilated = cv2.dilate(
@@ -381,7 +391,7 @@ def estimate_clean_lab_background(bgr_img):
     pseudo_trans = np.clip(255.0 - lab_dist * 2.0, 0, 255).astype(np.uint8)
     return filtered, lab, smooth_bg, pseudo_trans
 
-
+# Refina los bordes de la partícula localmente buscando el máximo contraste
 def refine_mask_with_local_otsu(pseudo_crop, sauvola_mask):
     contrast = 255 - pseudo_crop
     if not np.any(sauvola_mask > 0):
@@ -391,15 +401,18 @@ def refine_mask_with_local_otsu(pseudo_crop, sauvola_mask):
     if max_contrast <= 50.0:
         return sauvola_mask
 
+    # Calcula el umbral matemático de separación usando Otsu
     otsu, _ = cv2.threshold(
         contrast, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
     )
     threshold = max(float(otsu) * 0.70, max_contrast * 0.30)
     _, local_mask = cv2.threshold(contrast, threshold, 255, cv2.THRESH_BINARY)
+
+    # Conserva la intersección entre Sauvola y Otsu
     combined = cv2.bitwise_and(sauvola_mask, local_mask)
     return combined if np.sum(combined > 0) >= 15 else sauvola_mask
 
-
+# Aplicación del umbral adaptativo (Sauvola) sobre la pseudo-transparencia
 threshold_map = threshold_sauvola(
     pseudo_trans, window_size=SAUVOLA_WINDOW_SIZE, k=SAUVOLA_K_PARAM
 )
@@ -435,18 +448,21 @@ Cada contorno se representa mediante descriptores que capturan propiedades difer
 La circularidad se aproxima a 1 para partículas redondeadas; la relación de elipse se aproxima a 1 cuando los ejes tienen longitudes parecidas. Para el color, se dilata ligeramente la máscara para compensar píxeles perdidos en el refinamiento, y se compara la región de la partícula con el fondo estimado. El histograma LBP se calcula con `P=8`, `R=1` y se normaliza con `density=True`.
 
 ```python
+# Extracción de descriptores geométricos clásicos
 area = float(cv2.contourArea(contour))
 perimeter = float(cv2.arcLength(contour, True))
 circularity = 4.0 * np.pi * area / (perimeter ** 2) if perimeter > 0 else 0.0
 compactness = perimeter ** 2 / area if area > 0 else 0.0
 extent = area / float(box_w * box_h) if box_w * box_h > 0 else 0.0
 
+# Relación de ajuste a una elipse perfecta (para identificar Pellets)
 ellipse_ratio = 1.0
 if len(contour) >= 5:
     _, axes, _ = cv2.fitEllipse(contour)
     if min(axes) > 0:
         ellipse_ratio = float(max(axes) / min(axes))
 
+# Extracción de relación de luz y color usando el fondo limpio como referencia
 fg_lab = lab_img[particle_mask].astype(np.float32)
 bg_lab = bg_lab_img[particle_mask].astype(np.float32)
 L_ratio = float(fg_lab[:, 0].mean() / bg_lab[:, 0].mean())
@@ -454,6 +470,7 @@ chroma_rel = float(
     compute_channel_distance(fg_lab[:, 1:], bg_lab[:, 1:]).mean()
 )
 
+# Generación de textura usando Local Binary Pattern (LBP)
 lbp = local_binary_pattern(gray_crop, P=8, R=1, method="default")
 lbp_hist, _ = np.histogram(
     lbp[particle_mask], bins=256, range=(0, 256), density=True
@@ -477,6 +494,7 @@ Los diagramas de caja muestran la distribución de `L_ratio`, `chroma_rel` y cir
 El conjunto de partida es pequeño, así que el entrenamiento genera cinco variantes por imagen mediante cambios aleatorios en brillo, contraste, ganancia de color, gamma, desenfoque y ruido. Las magnitudes se muestrean uniformemente en los intervalos siguientes. Se incluyen además cambios de escala (zoom) durante la creación de las muestras de entrenamiento, para hacer el método menos sensible al tamaño aparente de las partículas.
 
 ```python
+# Límites permitidos para la mutación de las imágenes
 AUGMENTATION_BOUNDS = {
     "contrast": (0.8, 1.2),
     "brightness": (-20, 20),
@@ -487,13 +505,23 @@ AUGMENTATION_BOUNDS = {
     "scale_zoom": (0.80, 1.25),
 }
 
-
+# Modifica las propiedades forométricas aleatoriamente para crear datos de entrenamiento robustos
 def apply_photometric_augmentation(bgr_img):
     image = bgr_img.astype(np.float32)
+
+    # Desenfoque
     image = cv2.GaussianBlur(image, (0, 0), draw_uniform_param("blur"))
+
+    # Ruido
     image += np.random.normal(0, draw_uniform_param("noise"), image.shape)
+
+    # Contraste y Brillo
     image = image * draw_uniform_param("contrast") + draw_uniform_param("brightness")
+
+    # Color
     image *= draw_uniform_param("color_gain", 3)
+
+    # Gamma
     image = 255.0 * (
         np.clip(image, 0, 255) / 255.0
     ) ** draw_uniform_param("gamma")
@@ -514,16 +542,21 @@ Se implementan dos alternativas en cascada:
 La primera cascada es interpretable y permite ajustar sus cortes de forma explícita. La segunda aprovecha más características y sirve como clasificador de referencia. Ninguna utiliza aprendizaje profundo.
 
 ```python
+# Lógica en Cascada para el Sistema de Reglas Matemáticas
 def predict_cascade_rules(df, thresholds):
+    # Calibra la iluminación base antes de aplicar las reglas
     l_shift = max(
         0.0, float(df["L_ratio"].median() - thresholds["ref_median_L"])
     )
     adjusted_l = df["L_ratio"] - l_shift
 
+    # Regla 1: El Alquitrán es oscuro y no tiene tonos de color vivos
     is_tar = (
         (adjusted_l < thresholds["max_brightness"])
         & (df["chroma_rel"] < thresholds["max_color"])
     )
+
+    # Regla 2: El Pellet es redondo y elíptico (y no puede ser Alquitrán)
     is_pel = (~is_tar) & (
         (df["circularity"] > thresholds["min_circularity"])
         | (
@@ -531,10 +564,13 @@ def predict_cascade_rules(df, thresholds):
             & (df["extent"] > thresholds["min_extent"])
         )
     )
+
+    # Regla 3: El resto son Fragmentos (FRA)
     return np.select([is_tar, is_pel], ["TAR", "PEL"], default="FRA")
 
 
-# SMACC: primer nivel geométrico, segundo nivel color + textura.
+# Clasificador Machine Learning en Cascada (Cascada SMACC)
+# Nivel 1: Random Forest evaluando solo la forma para aislar los Pellets
 level_1 = make_pipeline(
     StandardScaler(),
     RandomForestClassifier(
@@ -542,6 +578,8 @@ level_1 = make_pipeline(
         random_state=SEED_VALUE
     ),
 )
+
+# Nivel 2: SVM evaluando el color y la textura comprimida con PCA para diferenciar FRA de TAR
 level_2 = make_pipeline(
     StandardScaler(),
     SVC(kernel="rbf", C=1.0, class_weight="balanced",
@@ -569,9 +607,12 @@ La búsqueda devuelve estos valores:
 El acierto balanceado en entrenamiento es **0.881**. Se utiliza el acierto balanceado porque tiene en cuenta el recall de cada clase por igual y es más informativo que la exactitud simple cuando las clases tienen distinto número de ejemplos.
 
 ```python
+# Bucle de Entrenamiento: Expansión de datos y creación del DataFrame general
 training_parts = []
 for label, image_path in FULL_TRAIN_PATHS.items():
     image = read_and_scale_training_image(image_path)
+
+    # Genera 5 versiones fotométricas diferentes por cada imagen base
     versions = [image] + [
         apply_photometric_augmentation(image)
         for _ in range(AUGMENTATION_COUNT)
@@ -588,6 +629,7 @@ for label, image_path in SUB_TRAIN_PATHS.items():
         df_part["label"] = label
         training_parts.append(df_part)
 
+# Unificación de datos y entrenamiento paralelo de ambas estrategias (Reglas vs ML)
 train_df = pd.concat(training_parts, ignore_index=True)
 learned_thresholds, train_balanced_accuracy = fit_cascade_rules_vectorized(train_df)
 smacc_ml_model = SMACCCascadeClassifierML().fit(train_df)
@@ -602,6 +644,7 @@ La gráfica de la izquierda muestra las fronteras que separan `TAR` según `L_ra
 La evaluación usa `MPs_test.jpg` y las 120 cajas de `MPs_test_bbs.csv`. Cada contorno detectado se convierte en una caja delimitadora. Se calcula la intersección sobre unión (IoU) de cada caja detectada con las anotaciones y se acepta un emparejamiento a partir de 0.30. Los objetos anotados sin detección son falsos negativos; las detecciones sin anotación emparejada son falsos positivos. Las métricas de clasificación se calculan sobre los 115 objetos emparejados.
 
 ```python
+# Función para calcular el solape (Intersection over Union) entre detección y anotación humana
 def compute_iou(gt_box, det_box):
     x0 = max(gt_box[0], det_box[0])
     y0 = max(gt_box[1], det_box[1])
@@ -613,7 +656,7 @@ def compute_iou(gt_box, det_box):
     union = area_gt + area_det - inter
     return inter / union if union > 0 else 0.0
 
-
+# Empareja solo si el solapamiento supera el mínimo exigido (30%)
 matched = match_detections_to_annotations(
     detections_df, annotations_gt, min_iou=MIN_IOU_THRESHOLD
 )
@@ -678,6 +721,15 @@ La figura resume, a la izquierda, el acierto balanceado de entrenamiento y test 
 ### Conclusiones y limitaciones
 
 La propuesta combina una segmentación adaptativa con descriptores interpretables y reglas cuyos umbrales se aprenden de los ejemplos, sin recurrir a aprendizaje profundo. En el conjunto utilizado, la cascada autónoma logra 91 aciertos de 115 partículas emparejadas (accuracy 0.791; balanced accuracy 0.751). La confusión más importante es entre pellets y fragmentos, y quedan cinco objetos anotados sin detectar y cuatro falsos positivos. Por ello, el resultado es razonable para este conjunto, pero no implica que la solución sea robusta a otros fondos, cámaras, iluminaciones o distribuciones de partículas.
+
+### Fuentes y Herramientas
+Para la realización de esta tarea se han consultado las siguientes fuentes y herramientas:
+* **Artículo de investigación:** [SMACC: A System for Microplastics Automatic Counting and Classification](https://ieeexplore.ieee.org/document/8976153/).
+* **Apuntes de la asignatura:** Material, diapositivas y guiones proporcionados durante el curso.
+* **Inteligencia Artificial:** Se ha utilizado IA generativa como asistente durante la resolución de la tarea para:
+  * Mejorar la toma de decisiones en el diseño del código y asistir en la implementación de las soluciones (por ejemplo, en la fusión de los métodos heurísticos de segmentación).
+  * Realizar la búsqueda de información teórica y técnica para poder abordar la tarea de la mejor forma posible, como la comprensión detallada de métricas de evaluación, el funcionamiento de algoritmos específicos de visión artificial y consultas sobre librerías.
+  * Asistir en la redacción, estructuración de la información y adición de comentarios aclaratorios en este README.
 
 ## Aportación de cada miembro del grupo en las tareas realizadas en esta práctica
 - Tarea 1: Sergio
