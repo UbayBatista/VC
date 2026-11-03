@@ -1,2 +1,5 @@
 # Ignore image, video, and text files
 *.txt
+
+# Ignore dataset files
+dataset/
