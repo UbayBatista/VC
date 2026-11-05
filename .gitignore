@@ -3,3 +3,7 @@
 
 # Ignore dataset files
 dataset/
+
+# Ignore video files
+C0142.MP4
+salida.mp4
