@@ -32,39 +32,78 @@ MODELS = {
         "r101": ("rtdetrv2/rtdetrv2_r101vd_6x_coco.yml",   "v0.1", "rtdetrv2_r101vd_6x_coco_from_paddle.pth"),
     },
 }
+
 SIZE_ALIASES = {"s": "r18", "m": "r50m", "l": "r50", "x": "r101"}   # nombres cortos
 
+def load_rtdetr( family="v2", size="s", device=DEVICE, model_path=None, config_path=None ):
+    if model_path is not None:
+        if config_path is None:
+            raise ValueError( "Para usar un modelo local debes indicar también config_path." )
 
-def load_rtdetr(family="v2", size="s", device=DEVICE):
+        if not os.path.exists(model_path):
+            raise FileNotFoundError( f"No se encuentra el modelo local: {model_path}" )
+
+        if not os.path.exists(config_path):
+            raise FileNotFoundError( f"No se encuentra la configuración: {config_path}" )
+
+        load_config.__defaults__[0].clear()
+        cfg = YAMLConfig(config_path)
+
+        ckpt = torch.load( model_path, map_location="cpu", weights_only=True )
+
+        if "ema" in ckpt:
+            state_dict = ckpt["ema"]["module"]
+        elif "model" in ckpt:
+            state_dict = ckpt["model"]
+        else:
+            state_dict = ckpt
+
+        cfg.model.load_state_dict(state_dict)
+
+        model = cfg.model.deploy().to(device)
+        postprocessor = cfg.postprocessor.deploy().to(device)
+
+        model.eval()
+
+        return model, postprocessor
 
     family = family.lower()
     size = size.lower()
-    print(f"Cargando RT-DETR familia {family!r}, tamaño {size!r} en {device}")
-    
+
     size = SIZE_ALIASES[size] if size in SIZE_ALIASES else size
-    
+
     if family not in MODELS or size not in MODELS[family]:
-        raise ValueError(f"Modelo desconocido: {family}/{size}. Inserte familia v2 o v1 y tamaño s,m,l,x o r18,r34,r50m,r50,r101")
-    
-    # Sacamos el diccionario el archivo de configuración, y lo necesario para descargar los pesos.
-    
+        raise ValueError(
+            f"Modelo desconocido: {family}/{size}. "
+            "Inserte familia v2 o v1 y tamaño "
+            "s,m,l,x o r18,r34,r50m,r50,r101"
+        )
+
     cfg_name, tag, wfile = MODELS[family][size]
 
     WEIGHTS = f"weights/{wfile}"
+
     if not os.path.exists(WEIGHTS):
-        print(f'No se detectaron los pesos del modelo {family}/{size}. Se estan descargando y guardando en {WEIGHTS}')
+        print(
+            f'No se detectaron los pesos del modelo '
+            f'{family}/{size}. Se estan descargando y guardando en {WEIGHTS}'
+        )
+
         os.makedirs("weights", exist_ok=True)
-        urllib.request.urlretrieve(
-            f"https://github.com/lyuwenyu/storage/releases/download/{tag}/{wfile}", WEIGHTS)
 
+        urllib.request.urlretrieve( f"https://github.com/lyuwenyu/storage/releases/download/{tag}/{wfile}", WEIGHTS )
 
-    
-    # Teniendo el archivo de configuración y los pesos descargados, cargamos el modelo y el postprocesador.
     load_config.__defaults__[0].clear()
+
     cfg = YAMLConfig(f"{REPO}/configs/{cfg_name}")
-   
-    ckpt = torch.load(WEIGHTS, map_location="cpu", weights_only=True)
-    cfg.model.load_state_dict(ckpt["ema"]["module"] if "ema" in ckpt else ckpt["model"])
+
+    ckpt = torch.load( WEIGHTS, map_location="cpu", weights_only=True )
+
+    cfg.model.load_state_dict( ckpt["ema"]["module"] if "ema" in ckpt else ckpt["model"] )
+
     model = cfg.model.deploy().to(device)
     postprocessor = cfg.postprocessor.deploy().to(device)
+
+    model.eval()
+
     return model, postprocessor
