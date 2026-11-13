@@ -1,0 +1,2 @@
+runs/detect/rtdetr_plate_ft_unfrozen/checkpoint.pth filter=lfs diff=lfs merge=lfs -text
+weights/rtdetr_r50vd_6x_coco_from_paddle.pth filter=lfs diff=lfs merge=lfs -text
