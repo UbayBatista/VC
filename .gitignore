@@ -2,8 +2,20 @@
 *.txt
 
 # Ignore dataset files
-dataset/
+dataset*/
+
+# Ignore directories
+viz_val/
+RT-DETR/
 
 # Ignore video files
 C0142.MP4
 salida.mp4
+
+# RT-DETR - checkpoints intermedios
+P4/runs/detect/rtdetr_plate_ft_unfrozen/checkpoint00*.pth
+P4/runs/detect/rtdetr_plate_ft_unfrozen/eval
+
+# RT-DETR - otros archivos generados del entrenamiento
+P4/runs/detect/rtdetr_plate_ft_unfrozen/*.log
+P4/runs/detect/rtdetr_plate_ft_unfrozen/events*
