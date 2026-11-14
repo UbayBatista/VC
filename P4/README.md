@@ -176,9 +176,9 @@ Aquí se añaden las demos de los modelos, aunque sean unos pocos segundos y se 
 [▶️ Resultado YOLO - UNLIMITED_OCR](https://drive.google.com/file/d/1n8dT2LUdIIlnQcemotFo_fLEA22Q9WC8/view?usp=sharing)
 [▶️ Resultado RTDETR - EASYOCR](https://drive.google.com/file/d/1Di-8jVlpbxH042QHuoxX0y4h7lUif78a/view?usp=sharing)
 [▶️ Resultado RTDETR - PADDLEOCR](https://drive.google.com/file/d/19O1Llt62wNxHIR7moCg_cuUSscFSSgxQ/view?usp=sharing)
-[▶️ Resultado RTDETR - SMOLVLM](https://drive.google.com/file/d/1O3H5TDYVm-2VxM4PnQJ6Dh6B2Le8r44C/view?usp=sharing)
+[▶️ Resultado RTDETR - SMOLVLM](https://drive.google.com/file/d/1fJFuC3CWUfhUSgUiv7hZIHsPIRJXMoWi/view?usp=sharing)
 [▶️ Resultado RTDETR - TESSERACT](https://drive.google.com/file/d/1ybZB9iPsf64BBM_zX1gZDS0u6mfNtmVf/view?usp=sharing)
-[▶️ Resultado RTDETR - UNLIMITED_OCR](https://drive.google.com/file/d/1n8dT2LUdIIlnQcemotFo_fLEA22Q9WC8/view?usp=sharing)
+[▶️ Resultado RTDETR - UNLIMITED_OCR](https://drive.google.com/file/d/1Iv2OT25FcQA-gw-qy90Ky5yImaVBTT8l/view?usp=sharing)
 
 ## Comparativa de los modelos de OCR
 
