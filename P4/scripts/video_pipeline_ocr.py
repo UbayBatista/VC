@@ -6,7 +6,7 @@ Por cada modelo genera:
 y al final un resumen con el tiempo empleado por cada uno (video_summary.csv).
 
 Se ejecuta desde Colab con la carpeta del proyecto en Drive (ver celdas del cuaderno
-benchmark_ocr) o con `python video_pipeline_ocr.py`.
+run_video_colab.ipynb) o con `python video_pipeline_ocr.py`.
 """
 
 import csv
@@ -41,7 +41,7 @@ PLATE_CONF = 0.25         # confianza mínima del detector de matrículas
 OCR_EVERY = 10            # cada cuántos fotogramas se vuelve a leer la matrícula de un vehículo
 MIN_PLATE_CHARS = 4       # lecturas más cortas se descartan por ser ruido
 PADDING = 0.05            # margen al recortar la matrícula
-MAX_FRAMES = None         # límite de fotogramas a analizar. None procesa todo el vídeo.
+MAX_FRAMES = None         # poner por ejemplo 300 para una prueba rápida
 # -----------------------------------------------------------------------------
 
 
@@ -60,8 +60,7 @@ def process_video(ocr_name):
     out_video = os.path.join(OUTPUT_DIR, f"salida_{ocr_name}.mp4")
     out_csv = os.path.join(OUTPUT_DIR, f"tracking_{ocr_name}.csv")
 
-    # Se recrean los modelos en cada experimento para reiniciar el estado del tracker
-    # y garantizar que todos los OCR se evalúan bajo las mismas condiciones.
+    # Modelos nuevos en cada pasada, así el tracker empieza de cero y todos parten igual
     vehicle_model = YOLO("yolo11n.pt")
     plate_model = YOLO(PLATE_WEIGHTS)
     ocr = build_model(ocr_name)
@@ -73,7 +72,7 @@ def process_video(ocr_name):
     cap.release()
 
     out_h = int(src_h * OUT_WIDTH / src_w)
-    scale = OUT_WIDTH / src_w          # para pasar las coordenadas originales al vídeo de salida
+    scale = OUT_WIDTH / src_w          # para pasar coordenadas originales al vídeo de salida
 
     writer = None
     if SAVE:
@@ -82,7 +81,7 @@ def process_video(ocr_name):
 
     person_ids, vehicle_ids = set(), set()
 
-    # mejor lectura de cada vehículo hasta el momento: track_id -> dict
+    # Mejor lectura de cada vehículo hasta el momento: track_id -> dict
     best_reading = {}
     last_ocr_frame = {}
 
@@ -137,8 +136,7 @@ def process_video(ocr_name):
                         mx1, my1, mx2, my2 = x1 + px1, y1 + py1, x1 + px2, y1 + py2
                         plate_label, plate_conf = "plate", pconf
 
-                        # limita la frecuencia de OCR por vehículo, ya que procesar la matrícula en
-                        # cada fotograma aumentaría el coste computacional sin aportar información relevante.
+                        # solo leemos con OCR de vez en cuando para no ir lentos
                         due = frame_idx - last_ocr_frame.get(track_id, -OCR_EVERY) >= OCR_EVERY
                         if due:
                             bw, bh = mx2 - mx1, my2 - my1
@@ -161,7 +159,7 @@ def process_video(ocr_name):
                                 text = clean_text(text)
                                 last_ocr_frame[track_id] = frame_idx
 
-                                # actualizamos la mejor lectura de la matrícula si el texto es válido y la detección es más fiable
+                                # guardamos la lectura si es plausible y la matrícula se vio mejor
                                 prev = best_reading.get(track_id)
                                 if len(text) >= MIN_PLATE_CHARS and (prev is None or pconf > prev["det_conf"]):
                                     best_reading[track_id] = {"text": text, "det_conf": pconf}
@@ -170,7 +168,7 @@ def process_video(ocr_name):
                         cv2.rectangle(frame, (int(mx1 * scale), int(my1 * scale)),
                                       (int(mx2 * scale), int(my2 * scale)), (0, 0, 255), 2)
 
-                # mostrar la mejor matrícula reconocida para este vehículo
+                # texto leído encima del vehículo (si ya tenemos alguno)
                 if track_id in best_reading:
                     plate_text = best_reading[track_id]["text"]
                     tx, ty = int(x1 * scale), int(y2 * scale) + 22
@@ -236,8 +234,7 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     summary_path = os.path.join(OUTPUT_DIR, "video_summary.csv")
 
-    # si existe un resumen previo, cargamos los resultados ya obtenidos para
-    # reanudar el benchmark sin repetir los modelos completados
+    # Si ya existe el resumen, se conservan los modelos terminados y se saltan
     done = {}
     if os.path.exists(summary_path):
         done = {row["ocr"]: row for row in pd.read_csv(summary_path).to_dict("records")}
