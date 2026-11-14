@@ -38,15 +38,147 @@ Una vez entrenado el modelo de YOLO, se hizo lo mismo con el modelo de RTDETR, q
 
 ---
 
-Una vez estaban los modelos ya entrenados, con el fin de tener un código más sencillo y sin repeticiones, se optó por usar únicamente un modelo de YOLO para la detección de vehículos, ya que el comportamiento en las detecciones es diferente. Con esto, se obtuvo el siguiente código:
+Una vez estaban los modelos ya entrenados, con el fin de tener un código más sencillo y sin repeticiones, se optó por usar únicamente un modelo de YOLO para la detección de vehículos, ya que el comportamiento en las detecciones es diferente. Con esto, se divide el proceso en 3 partes: la primera, detección de vehículos y personas; la segunda, detección de matrículas mediante los modelos entrenados; y, por último, la extracción de texto con OCR:
 
 ~~~python
+csv_file = open(out_csv, "w", newline="", encoding="utf-8")
+csv_writer = csv.writer(csv_file)
+csv_writer.writerow(["fotograma", "tipo_objeto", "confianza", "identificador_tracking",
+                        "x1", "y1", "x2", "y2", "matrícula_en_su_caso", "confianza",
+                        "mx1", "my1", "mx2", "my2", "texto_matricula"])
 
+results = vehicle_model.track(source=VIDEO_PATH, stream=True, persist=True,
+                                classes=CLASSES, imgsz=IMGSZ, verbose=False)
+
+t_total = time.perf_counter()
+frame_idx = 0
+for r in results:
+    orig = r.orig_img
+    oh, ow = orig.shape[:2]
+
+    frame = cv2.resize(r.plot(), (OUT_WIDTH, out_h))
+
+    for box in r.boxes:
+        if box.id is None:
+            continue
+
+        name = vehicle_model.names[int(box.cls[0])]
+        track_id = int(box.id[0])
+        conf = float(box.conf[0])
+        x1, y1, x2, y2 = map(int, box.xyxy[0])
+        x1, y1, x2, y2 = max(x1, 0), max(y1, 0), min(x2, ow), min(y2, oh)
+
+        plate_label, plate_conf = "", ""
+        mx1 = my1 = mx2 = my2 = ""
+        plate_text = ""
+
+        if name in VEHICLES:
+            vehicle_ids.add(track_id)
+            vehicle_crop = orig[y1:y2, x1:x2]
+
+            if vehicle_crop.size == 0:
+                continue
+
+            found = get_best_plate(plates_detector, vehicle_crop, yolo)
+            
+            if found is not None:
+                px1, py1, px2, py2, pconf = found
+
+                # Coordenadas de la matrícula respecto al fotograma completo
+                mx1, my1, mx2, my2 = x1 + px1, y1 + py1, x1 + px2, y1 + py2
+                plate_label, plate_conf = "plate", pconf
+
+                # Colo leemos con OCR de vez en cuando para no ir lentos
+                due = frame_idx - last_ocr_frame.get(track_id, -TIME_BETWEEN_OCR) >= TIME_BETWEEN_OCR
+                if due:
+                    bw, bh = mx2 - mx1, my2 - my1
+                    cx1 = max(int(mx1 - bw * PADDING), 0)
+                    cy1 = max(int(my1 - bh * PADDING), 0)
+                    cx2 = min(int(mx2 + bw * PADDING), ow)
+                    cy2 = min(int(my2 + bh * PADDING), oh)
+                    plate_crop = orig[cy1:cy2, cx1:cx2]
+
+                    if plate_crop.size > 0:
+                        t0 = time.perf_counter()
+                        try:
+                            text, _ = ocr.read(plate_crop)
+                        except Exception as e:
+                            text = ""
+                            print(f"  fallo de OCR en fotograma {frame_idx}: {e}")
+                        ocr_time += time.perf_counter() - t0
+                        ocr_calls += 1
+
+                        text = clean_text(text)
+                        last_ocr_frame[track_id] = frame_idx
+
+                        # guardamos la lectura si es plausible y la matrícula se vio mejor
+                        prev = best_reading.get(track_id)
+                        if len(text) >= MIN_PLATE_CHARS and (prev is None or pconf > prev["det_conf"]):
+                            best_reading[track_id] = {"text": text, "det_conf": pconf}
+
+                # dibujamos la caja de la matrícula en el vídeo de salida
+                cv2.rectangle(frame, (int(mx1 * scale), int(my1 * scale)),
+                                (int(mx2 * scale), int(my2 * scale)), (0, 0, 255), 2)
+
+        # texto leído encima del vehículo (si ya tenemos alguno)
+        if track_id in best_reading:
+            plate_text = best_reading[track_id]["text"]
+            tx, ty = int(x1 * scale), int(y2 * scale) + 22
+            (tw, th), _ = cv2.getTextSize(plate_text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)
+            cv2.rectangle(frame, (tx, ty - th - 6), (tx + tw + 6, ty + 6), (0, 0, 0), -1)
+            cv2.putText(frame, plate_text, (tx + 3, ty),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+                
+
+        elif name == "person":
+            person_ids.add(track_id)
+
+        csv_writer.writerow([frame_idx, name, conf, track_id, x1, y1, x2, y2,
+                                         plate_label, plate_conf, mx1, my1, mx2, my2, plate_text])
+
+    # contadores y nombre del OCR usado
+    cv2.rectangle(frame, (10, 10), (280, 90), (0, 0, 0), -1)
+    cv2.putText(frame, f"Vehiculos: {len(vehicle_ids)}", (20, 45),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    cv2.putText(frame, f"Personas: {len(person_ids)}", (20, 78),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+    cv2.putText(frame, f"OCR: {OCR_NAME}", (OUT_WIDTH - 300, 35),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+
+    if writer:
+        writer.write(frame)
+
+    if SHOW:
+        cv2.imshow("Tracking", frame)
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
+
+    frame_idx += 1
+
+csv_file.close()
+
+if writer:
+    writer.release()
+if SHOW:
+    cv2.destroyAllWindows()
 ~~~
 
 Obteniendo los siguientes resultados: 
 
 Aquí se añaden las demos de los modelos, aunque sean unos pocos segundos y se ponen los enlaces al drive con los resultados
+
+## Resultados
+
+[▶️ Resultado YOLO - EASYOCR](https://drive.google.com/file/d/1Di-8jVlpbxH042QHuoxX0y4h7lUif78a/view?usp=sharing)
+[▶️ Resultado YOLO - PADDLEOCR](https://drive.google.com/file/d/1bMLKCrxbeiaapeeoL2m7UNVo70PSGJL_/view?usp=sharing)
+[▶️ Resultado YOLO - SMOLVLM](https://drive.google.com/file/d/1O3H5TDYVm-2VxM4PnQJ6Dh6B2Le8r44C/view?usp=sharing)
+[▶️ Resultado YOLO - TESSERACT](https://drive.google.com/file/d/1fZUz4pJS6ING7YOKZtPmiS2186I8MWVY/view?usp=sharing)
+[▶️ Resultado YOLO - UNLIMITED_OCR](https://drive.google.com/file/d/1n8dT2LUdIIlnQcemotFo_fLEA22Q9WC8/view?usp=sharing)
+[▶️ Resultado RTDETR - EASYOCR](https://drive.google.com/file/d/1Di-8jVlpbxH042QHuoxX0y4h7lUif78a/view?usp=sharing)
+[▶️ Resultado RTDETR - PADDLEOCR](https://drive.google.com/file/d/19O1Llt62wNxHIR7moCg_cuUSscFSSgxQ/view?usp=sharing)
+[▶️ Resultado RTDETR - SMOLVLM](https://drive.google.com/file/d/1O3H5TDYVm-2VxM4PnQJ6Dh6B2Le8r44C/view?usp=sharing)
+[▶️ Resultado RTDETR - TESSERACT](https://drive.google.com/file/d/1ybZB9iPsf64BBM_zX1gZDS0u6mfNtmVf/view?usp=sharing)
+[▶️ Resultado RTDETR - UNLIMITED_OCR](https://drive.google.com/file/d/1n8dT2LUdIIlnQcemotFo_fLEA22Q9WC8/view?usp=sharing)
 
 ## Comparativa de los modelos de OCR
 
@@ -251,10 +383,6 @@ El orden de velocidad coincide con el del benchmark, aunque los tiempos por llam
 - **Prompt y configuración.** Se usó un único prompt por modelo, sin ajustarlo. En SmolVLM y Unlimited-OCR los resultados dependen de él.
 - **Versiones.** En Colab varias librerías no se fijaron, así que otra ejecución en otra fecha puede dar resultados algo distintos.
 
-## Anonimización de las personas en el vídeo
-
-## Conteo de personas en base al sentido que toman
-
 ## Aportación de cada miembro del grupo en las tareas realizadas en esta práctica
 
 Sergio: tratado del dataset, detección de vehículos y entrenamiento de los modelos de detección de matrículas
@@ -265,3 +393,14 @@ Ubay: extracción de texto con OCR y comparativa de los distintos modelos
 ## Conversaciones con la Inteligencia Artificial
 
 Además, hemos utilizado la asistencia de la IA para la elección de las métricas y su explicación en el README. 
+
+- Para generar el script de transformación del dataset: https://claude.ai/share/d1b1dc3a-999c-4254-93c0-e7094c285e25
+
+- Para generar el script de entrenamiento de rtdetr: https://claude.ai/share/e82cfc50-92b0-4a34-a130-ae2f024ffcad
+
+- Para mejorar la precisión del modelo rtdetr: https://chatgpt.com/share/6af77b55-7b80-83ed-ad1b-97f1f5a814cb
+
+- Para generar el visualizador de anotaciones de YOLO: https://claude.ai/share/d719cc26-1b4c-4867-be6a-aa76a4372f53
+
+- Para adaptar el fichero video_pipeline_ocr_rtdetr: https://chatgpt.com/share/6af77a0d-aed8-83ed-991e-c87717906ffc
+
