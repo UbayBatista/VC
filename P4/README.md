@@ -163,9 +163,7 @@ if SHOW:
     cv2.destroyAllWindows()
 ~~~
 
-Obteniendo los siguientes resultados: 
-
-Aquí se añaden las demos de los modelos, aunque sean unos pocos segundos y se ponen los enlaces al drive con los resultados
+Obteniendo los siguientes resultados:
 
 ## Resultados
 
