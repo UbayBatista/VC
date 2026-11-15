@@ -11,6 +11,7 @@ el mismo código para cada modelo.
 
 import os
 import re
+import sys
 import glob
 import shutil
 import tempfile
@@ -46,6 +47,42 @@ def _as_path(image, tmp_dir):
     path = os.path.join(tmp_dir, "tmp_input.jpg")
     cv2.imwrite(path, image)
     return path
+
+
+def _find_tesseract(explicit=None):
+    """
+    Localiza el ejecutable de Tesseract sin depender de una ruta fija.
+    Orden: argumento -> variable TESSERACT_CMD -> PATH -> conda -> Program Files.
+    Devuelve la ruta o None si no se encuentra.
+    """
+    candidates = [explicit, os.environ.get("TESSERACT_CMD"), shutil.which("tesseract")]
+
+    exe = "tesseract.exe" if os.name == "nt" else "tesseract"
+    prefix = os.environ.get("CONDA_PREFIX") or sys.prefix
+    candidates += [
+        os.path.join(prefix, "Library", "bin", exe),   # conda-forge en Windows
+        os.path.join(prefix, "bin", exe),              # conda en Linux/macOS
+    ]
+    if os.name == "nt":
+        candidates += [
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        ]
+
+    for c in candidates:
+        if c and os.path.isfile(c):
+            return c
+    return None
+
+
+def _find_tessdata(prefix):
+    """Busca una carpeta tessdata que contenga datos de idioma dentro del entorno."""
+    for sub in (("Library", "share", "tessdata"), ("share", "tessdata"),
+                ("Library", "bin", "tessdata")):
+        d = os.path.join(prefix, *sub)
+        if os.path.isdir(d):
+            return d
+    return None
 
 
 class BaseOCR:
@@ -91,23 +128,49 @@ class TesseractModel(BaseOCR):
     name = "tesseract"
     device = "cpu"
 
-    def __init__(self, tesseract_cmd=None):
+    def __init__(self, tesseract_cmd=None, lang="spa"):
         self.tesseract_cmd = tesseract_cmd
+        self.lang = lang
 
     def load(self):
         import pytesseract
         self.pytesseract = pytesseract
 
-        # En Windows hay que indicar el ejecutable; en Colab/Linux ya está en el PATH
-        if self.tesseract_cmd:
-            pytesseract.pytesseract.tesseract_cmd = self.tesseract_cmd
-        elif os.name == "nt":
-            pytesseract.pytesseract.tesseract_cmd = r"C:/Program Files/Tesseract-OCR/tesseract"
+        cmd = _find_tesseract(self.tesseract_cmd)
+        if cmd is None:
+            raise RuntimeError(
+                "No se encuentra Tesseract. Instálalo con "
+                "'conda install -c conda-forge tesseract' o define la variable "
+                "de entorno TESSERACT_CMD con la ruta de tesseract.exe."
+            )
+        pytesseract.pytesseract.tesseract_cmd = cmd
+
+        # Si no hay TESSDATA_PREFIX, intentamos usar la carpeta del entorno conda
+        if not os.environ.get("TESSDATA_PREFIX"):
+            prefix = os.environ.get("CONDA_PREFIX") or sys.prefix
+            tessdata = _find_tessdata(prefix)
+            if tessdata:
+                os.environ["TESSDATA_PREFIX"] = tessdata
+
+        # Comprobamos ahora que funciona, para que el error salga al cargar
+        # y no una vez por fotograma
+        try:
+            pytesseract.get_tesseract_version()
+            available = pytesseract.get_languages(config="")
+        except Exception as e:
+            raise RuntimeError(f"Tesseract no responde ({cmd}): {e}") from e
+
+        if self.lang not in available:
+            print(f"[tesseract] Falta el idioma '{self.lang}' (disponibles: {available}). "
+                  f"Se usa 'eng'. Copia {self.lang}.traineddata en tessdata para arreglarlo.")
+            self.lang = "eng" if "eng" in available else available[0]
+
+        print(f"[tesseract] usando {cmd} (idioma: {self.lang})")
 
     def read(self, image):
         rgb = cv2.cvtColor(_as_bgr(image), cv2.COLOR_BGR2RGB)
         # psm 7: tratar la imagen como una sola línea de texto (una matrícula lo es)
-        text = self.pytesseract.image_to_string(rgb, lang="spa", config="--psm 7")
+        text = self.pytesseract.image_to_string(rgb, lang=self.lang, config="--psm 7")
         return text.strip(), None
 
 
@@ -126,7 +189,7 @@ class PaddleOCRModel(BaseOCR):
         import paddleocr
         from paddleocr import PaddleOCR
 
-        # La API cambió en la versión 3 (la que se instala en Colab): lo detectamos
+        # La API cambió en la versión 3: lo detectamos
         self.major = int(paddleocr.__version__.split(".")[0])
 
         if self.major >= 3:
@@ -179,8 +242,10 @@ class UnlimitedOCRModel(BaseOCR):
     def load(self):
         from transformers import AutoModel, AutoTokenizer
 
+        use_cuda = self.device == "cuda" and torch.cuda.is_available()
+
         # El código del modelo llama a .cuda() por dentro; sin GPU lo anulamos
-        if not torch.cuda.is_available():
+        if not use_cuda:
             torch.Tensor.cuda = lambda self, *a, **k: self
             torch.nn.Module.cuda = lambda self, *a, **k: self
 
@@ -190,9 +255,10 @@ class UnlimitedOCRModel(BaseOCR):
             model_id,
             trust_remote_code=True,
             use_safetensors=True,
-            torch_dtype=torch.bfloat16,
+            # bfloat16 en CPU es muy lento; float32 es lo razonable sin GPU
+            torch_dtype=torch.bfloat16 if use_cuda else torch.float32,
         )
-        self.model = self.model.eval().cuda()
+        self.model = self.model.eval().to("cuda" if use_cuda else "cpu")
 
     @staticmethod
     def _strip_markup(text):

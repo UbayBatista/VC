@@ -3,11 +3,19 @@ import cv2
 import numpy as np
 import torch
 from PIL import Image
+
+# Carpeta del repo de RT-DETR que contiene el paquete `src`.
+# Se calcula respecto a este archivo, así no depende de desde dónde lances el notebook.
+_P4_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+RTDETR_SRC_DIR = os.path.join(_P4_DIR, "RT-DETR", "rtdetr_pytorch")
+
+if RTDETR_SRC_DIR not in sys.path:
+    sys.path.insert(0, RTDETR_SRC_DIR)
+
 from src.core import YAMLConfig
-from src.core.yaml_utils import load_config      # next to your YAMLConfig import
+from src.core.yaml_utils import load_config
 
-
-REPO = "RT-DETR/rtdetrv2_pytorch"
+REPO = RTDETR_SRC_DIR
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Para usar el modelo, necesitamos descargar los pesos oficiales desde el Repositorio.
