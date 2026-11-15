@@ -1,0 +1,37 @@
+name: ocr_env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - ipykernel
+  - ipywidgets
+  - tesseract
+  - pycocotools
+  - pyyaml
+  - scipy
+  - pip:
+      # PyTorch con CUDA 12.8 (compatible con Blackwell / RTX 50xx)
+      - --extra-index-url https://download.pytorch.org/whl/cu128
+      - torch
+      - torchvision
+
+      # Librerías generales
+      - ultralytics
+      - easyocr
+      - pytesseract
+      - rapidfuzz
+
+      # PaddleOCR (versión CPU, ver nota abajo)
+      - paddlepaddle
+      - paddleocr
+
+      # RT-DETR
+      - transformers==4.57.1
+      - addict
+      - einops
+      - easydict
+
+      # Evaluación y monitorización
+      - tensorboard
+      - faster-coco-eval

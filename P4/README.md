@@ -172,11 +172,11 @@ Obteniendo los siguientes resultados:
 [▶️ Resultado YOLO - SMOLVLM](https://drive.google.com/file/d/1O3H5TDYVm-2VxM4PnQJ6Dh6B2Le8r44C/view?usp=sharing)
 [▶️ Resultado YOLO - TESSERACT](https://drive.google.com/file/d/1fZUz4pJS6ING7YOKZtPmiS2186I8MWVY/view?usp=sharing)
 [▶️ Resultado YOLO - UNLIMITED_OCR](https://drive.google.com/file/d/1n8dT2LUdIIlnQcemotFo_fLEA22Q9WC8/view?usp=sharing)
-[▶️ Resultado RTDETR - EASYOCR](https://drive.google.com/file/d/1Di-8jVlpbxH042QHuoxX0y4h7lUif78a/view?usp=sharing)
-[▶️ Resultado RTDETR - PADDLEOCR](https://drive.google.com/file/d/19O1Llt62wNxHIR7moCg_cuUSscFSSgxQ/view?usp=sharing)
-[▶️ Resultado RTDETR - SMOLVLM](https://drive.google.com/file/d/1fJFuC3CWUfhUSgUiv7hZIHsPIRJXMoWi/view?usp=sharing)
-[▶️ Resultado RTDETR - TESSERACT](https://drive.google.com/file/d/1ybZB9iPsf64BBM_zX1gZDS0u6mfNtmVf/view?usp=sharing)
-[▶️ Resultado RTDETR - UNLIMITED_OCR](https://drive.google.com/file/d/1Iv2OT25FcQA-gw-qy90Ky5yImaVBTT8l/view?usp=sharing)
+[▶️ Resultado RTDETR - EASYOCR](https://drive.google.com/file/d/1KO-RuL9BWq-3eewwzEgM-kuG-DtTm1Gf/view?usp=sharing)
+[▶️ Resultado RTDETR - PADDLEOCR](https://drive.google.com/file/d/1HPwuT6GFyfThueyIc-n21tDj8M4yEaCj/view?usp=sharing)
+[▶️ Resultado RTDETR - SMOLVLM](https://drive.google.com/file/d/1ioNBCrpUE_3f0vlAj4ZXRhFNpbEUEoJv/view?usp=sharing)
+[▶️ Resultado RTDETR - TESSERACT](https://drive.google.com/file/d/1HE9qvDKWmOsnl3Pe3Dk7_fUWoJzPQT5k/view?usp=sharing)
+[▶️ Resultado RTDETR - UNLIMITED_OCR](https://drive.google.com/file/d/1lG-JuXAcN0zg4OKJnkSAh_fTR5lV7JE0/view?usp=sharing)
 
 ## Comparativa de los modelos de OCR
 
@@ -401,4 +401,6 @@ Además, hemos utilizado la asistencia de la IA para la elección de las métric
 - Para generar el visualizador de anotaciones de YOLO: https://claude.ai/share/d719cc26-1b4c-4867-be6a-aa76a4372f53
 
 - Para adaptar el fichero video_pipeline_ocr_rtdetr: https://chatgpt.com/share/6af77a0d-aed8-83ed-991e-c87717906ffc
+
+- Solucionar problemas con los OCR: https://claude.ai/share/2c4f4ced-bcf3-46ec-91c1-a531da554276
 
