@@ -1,0 +1,18 @@
+name: VC_P5
+channels:
+  - defaults
+dependencies:
+  - python=3.11.5
+  - pip
+  - jupyter
+  - ipykernel
+  - pip:
+      - matplotlib
+      - mtcnn
+      - tensorflow
+      - deepface
+      - tf-keras
+      - opencv-python==4.12.0.88
+      - mediapipe
+      - scikit-learn
+      - scikit-image
