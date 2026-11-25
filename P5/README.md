@@ -4,6 +4,115 @@
 
 ## desCONOCIDOS
 
+Para este filtro, se entrenó un extractor de características faciales a partir de un ResNet18 sobre el dataset CelebA, mediante triplets loss con un espacio vectorial sobre el que proyectar los rostros. Se explica más a detalle este proceso en la comparativa final, ya que se probaron distintos procedimientos para ver cuál daba mejor resultado.
+
+El punto de partida del código es el proporcionado en el repositorio de la asignatura, en el fichero `detectores`. Se optó por el uso de DNN para detectar la cara ya que ofrecía una respuesta muy fluida con menos falsos positivos que los otros modelos presentados. Para el desarrollo de este, se ha realizado un pipeline similar al de la práctica anterior. En primer lugar, el modelo DNN detecta la cara, y se le pasan tanto el frame como el recuadro la función `get_celeba_crop`, que transforma el recorte original en un recorte más similar al que se puede encontrar en el dataset. Esto, con el fin de mejorar la precisión del modelo. Para ello, se calculan el ancho, altura y el centro del recuadro que el primer modelo ha detectado como cara. Luego, se calculan los nuevos alto y ancho, asignando espacio de sobra y atendiendo a las proporciones de las imágenes del dataset, para evitar que se deforme en caso de redimensionarse. Por último, se transforman las coordenadas para garantizar que se encuentran dentro del frame y se retorna el nuevo crop.
+
+~~~python
+def get_celeba_crop(frame, box):
+    H, W = frame.shape[:2]
+    x1, y1, x2, y2 = box
+
+    w = x2 - x1
+    h = y2 - y1
+    cx = x1 + w / 2.0
+    cy = y1 + h / 2.0
+
+    new_h = h * 1.65
+    new_w = new_h * (178.0 / 218.0)
+
+    cy_shifted = cy - (h * 0.08)
+
+    nx1 = int(max(0, cx - new_w / 2.0))
+    ny1 = int(max(0, cy_shifted - new_h / 2.0))
+    nx2 = int(min(W, cx + new_w / 2.0))
+    ny2 = int(min(H, cy_shifted + new_h / 2.0))
+
+    return frame[ny1:ny2, nx1:nx2], (nx1, ny1, nx2, ny2)
+~~~
+
+Una vez generado el nuevo crop, se le pasa a la función `get_most_similar_famous`. Esta, genera una imagen a partir del rector, que luego transofrma en un tensor que se utilizará para generar el embedding con las características esenciales de la cara en la imagen. Luego, se calcula el producto vectorial de un embedding preentrenado, para obtener resultados más rápidos, obteniendo el famoso más parecido. Por último, se configura la ruta y se añade a una cola circular en la que se almacena el resultado de los últimos 20 frames, de forma en que la imagen que se muestra corresponde a la ruta con mayor cantidad de votaciones: 
+
+~~~python
+def get_most_similar_famous(face):
+    face_rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
+    face_image = Image.fromarray(face_rgb)
+
+    face_tensor = transform(face_image).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        query_embedding = model(face_tensor)
+        query_embedding = F.normalize(query_embedding, p=2, dim=1)
+
+    similarities = (query_embedding @ gallery_embeddings.T).squeeze(0)
+
+    best_index = torch.argmax(similarities).item()
+
+    route = "." + filenames[best_index]
+    votation.append(route)
+
+    most_common_route, _ = Counter(votation).most_common(1)[0]
+    return most_common_route
+~~~
+
+Una vez obtenida la ruta, se lee la imagen y se sobrepone en el centro de la parte superior del frame:
+
+~~~python
+overlay = cv2.imread(found)
+    if overlay is not None:
+        h, w = overlay.shape[:2]
+        x = max(0, min((W - w) // 2, W - w))
+        y = max(0, min(20, H - h))
+        frame[y : y + h, x : x + w] = overlay
+~~~
+
+### Comparativa entre modelos
+
+Ambos enfoques entrenan una arquitectura **ResNet-18** para proyectar rostros del dataset CelebA en un espacio vectorial (*embedding*) de 128 dimensiones, pero difieren radicalmente en su formulación matemática y estrategia de aprendizaje:
+
+* **Modelo 1 (Triplet Loss aleatorio):** Utiliza aprendizaje métrico puramente contrastivo sobre ternas (*Anchor*, *Positive*, *Negative*) elegidas al azar, optimizando directamente la distancia euclidiana ($m=0.3$) sin emplear etiquetas de clase globales.
+* **Modelo 2 (ArcFace + Batch-Hard Triplet Loss):** Combina un clasificador angular de margen aditivo ($s=30.0$, $m=0.3$) sobre todas las identidades de entrenamiento con Hard Triplet Loss sobre lotes estructurados, aplicando normalización $L_2$ estricta y recortando la imagen sin distorsión geométrica.
+
+---
+
+#### 1. Análisis de las curvas de entrenamiento
+
+* **Modelo 1:** La pérdida de entrenamiento (`Train Loss`) cae rápidamente de ~0.070 a menos de 0.005 hacia el final de las 20 épocas. Sin embargo, la pérdida de validación (`Validation Loss`) se estanca en torno a 0.031–0.045 con frecuentes oscilaciones. Esta brecha confirma que la red memoriza los casos fáciles de entrenamiento mientras los tripletes aleatorios dejan de aportar gradientes informativos para generalizar a identidades nuevas.
+* **Modelo 2:** La curva muestra una dinámica controlada en dos fases:
+  1. **Épocas 1 a 4 (*Warm-up* del margen):** La pérdida total (`Train Loss`) desciende inicialmente de ~9.5 a ~7.7 mientras el margen angular sube progresivamente desde $0.0$, experimentando un repunte esperado hasta ~8.5 en la época 4 al alcanzarse el margen completo.
+  2. **Épocas 4 a 20 (Convergencia sostenida):** A partir de ese punto, tanto la componente angular (`Train ArcFace`, que cae de ~8.3 a ~3.05) como la componente local (`Train Triplet`, que baja suavemente de ~0.68 a ~0.19) descienden de forma monótona y sin sobreajuste abrupto, permitiendo al modelo seguir refinando la separación hasta la época 18.
+
+<p align="center">
+    <img src="images/curva_loss.png" width="480">
+    <img src="images/train_losses.png"  width="480">
+</p>
+
+---
+
+#### 2. Comparativa cuantitativa de resultados
+
+Al cruzar los registros finales de `evaluation_metrics.csv` y `evaluation_metrics_arcface.csv`, el modelo híbrido triplica la capacidad de identificación exacta (**Recall@1**):
+
+| Métrica / Parámetro | Modelo 1 (Triplet aleatorio) | Modelo 2 (ArcFace + Batch-Hard) | Diferencia / Impacto |
+| :--- | :---: | :---: | :---: |
+| **Mejor época** | 15 | 18 | Mayor aprovechamiento del entrenamiento |
+| **Recall@1** | **16.10 %** (`0.1610`) | **49.24 %** (`0.4924`) | **+33.14 puntos** (3.06× superior) |
+| **Recall@5** | **33.50 %** (`0.3350`) | **66.24 %** (`0.6624`) | **+32.74 puntos** (1.98× superior) |
+| **Recall@10** | **41.40 %** (`0.4140`) | **73.16 %** (`0.7316`) | **+31.76 puntos** (1.77× superior) |
+| **Triplet Accuracy** | 96.06 % (`0.9606`) | 97.46 % (`0.9746`) | +1.40 puntos |
+| **Verificación (Acc / AUC)** | *No medida* | **92.56 %** / **0.9736** | Excelente separabilidad 1:1 |
+| **Separación del espacio** | Dist. pos: `0.556` / neg: `1.276` | Sim. pos: `0.449` / neg: `0.005` | Pares negativos casi ortogonales ($\approx 0$) |
+| **Protocolo de evaluación** | 1 000 queries / galería 5 000 | 5 000 queries / galería 2 031 | Evaluación más amplia y representativa |
+
+*(Nota sobre el protocolo: en el Modelo 1 se evaluó sobre 1 000 consultas frente a 5 000 imágenes de galería, mientras que en el Modelo 2 se emplearon 5 000 consultas frente a 2 031 identidades únicas en galería; aun considerando el distinto tamaño de galería, la ganancia de +33 puntos en Recall@1 refleja una mejora estructural sustancial en la discriminación fina).*
+
+---
+
+#### 3. Conclusiones clave
+
+1. **Engaño de la *Triplet Accuracy*:** Aunque el Modelo 1 alcanza un **96.06 %** de *Triplet Accuracy* (acierta al comparar un par positivo contra un único negativo aleatorio), su **Recall@1 cae al 16.10 %** al buscar a una persona entre miles de candidatos. Comparar contra un negativo al azar es demasiado fácil y no garantiza fronteras de decisión compactas, ya que el modelo acaba aprendiendo características superficiales no distintivas.
+2. **Eficacia de la geometría angular:** El Modelo 2 logra separar identidades distintas de forma notoria (similitud del coseno media negativa de **`0.0046`** frente a **`0.4494`** en positivos), logrando elevar el **Recall@1 al 49.24 %** y el **Recall@10 al 73.16 %** con una precisión de verificación 1:1 del **92.56 %** y un `AUC` de 0.9736. 
+
 ## Nose dibujarlo
 
 La premisa del filtro es la siguiente: decórate a ti y a tu entorno mediante dibujos que tú mismo puedes hacer, no obstante, para hacerlo más divertido, tú único pincel será tu nariz. 
@@ -158,3 +267,7 @@ P5
 - Para controlar el parpadeo: https://share.gemini.google/LUzMzPup7coK
 
 - Para anclar los dibujos a las caras: https://claude.ai/share/4d7dd9ed-3fc0-4d70-8aa1-152e76c1f8d9
+
+- Para generar el entrenamiento del primer modelo: https://chatgpt.com/share/6b076451-f7a8-83eb-bead-1603b8875e5f
+
+- Para generar el modelo del segundo entrenamiento: https://claude.ai/share/d8502458-ad75-48f8-adc7-0c6b8e80565d

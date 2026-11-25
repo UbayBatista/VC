@@ -1,0 +1,2 @@
+model,embedding_dim,epoch,triplet_accuracy,recall_at_1,recall_at_5,recall_at_10,positive_distance,negative_distance,num_queries,gallery_size
+resnet18,128,15,0.9606,0.161,0.335,0.414,0.5557881563186645,1.2762116474151612,1000,5000

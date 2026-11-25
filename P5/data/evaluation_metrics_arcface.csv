@@ -1,0 +1,2 @@
+recall_at_1,recall_at_5,recall_at_10,verif_acc,auc,triplet_acc,pos_sim,neg_sim,gallery_size,query_size,embedding_dim,arcface_margin,arcface_scale,triplet_margin,triplet_weight,best_epoch
+0.49239999055862427,0.6624000072479248,0.7315999865531921,0.9256,0.97356068,0.9745999574661255,0.4493812024593353,0.004645670764148235,2031,5000,128,0.3,30.0,0.3,0.5,18
