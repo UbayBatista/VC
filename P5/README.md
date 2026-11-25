@@ -1,6 +1,11 @@
 # Autores
 
+- [Ubay Antonio Batista Santana](https://github.com/UbayBatista)  
+- [Ángel Sergio Reyes Guedes](https://github.com/asergiorg)
+
 # Trabajo realizado
+
+El contenido de esta práctica está compuesto por 3 filtros que utilizan información biométrica, principalmente de la cara. El primero, es un filtro que muestra el famoso con el que compartes mayor parecido; el segundo, te permite dibujar usando la nariz y manejar esos dibujos a tu antojo; y, el tecero, te permite retarte con un compañero a un duelo al más puro estilo del viejo oeste.
 
 ## desCONOCIDOS
 
@@ -234,7 +239,7 @@ lines[i] = to_world(local, frame_ref).astype(np.int32)
 ## Comandos para crear el environment con lo necesario:
 
 ```
-conda env create -f environment.yml
+conda env create -f environments.yml
 conda activate VC_P5
 ```
 
@@ -257,6 +262,8 @@ P5
 ```
 
 # Fuentes
+
+- Enlace al dataset: https://mmlab.ie.cuhk.edu.hk/projects/CelebA.html
 
 ## Conversaciones con la IA
 
