@@ -36,3 +36,9 @@ P5
 ## Conversaciones con la IA
 
 - Para sobreponer la imagen del famoso sobre el frame: https://chatgpt.com/share/6b05e067-ece0-83eb-8341-fe86febccd56
+
+- Para extraer la información de los landmarks de la cara en el primer filtro: https://share.gemini.google/hreKMcZP6LcJ
+
+- Para controlar el parpadeo: https://share.gemini.google/LUzMzPup7coK
+
+- Para anclar los dibujos a las caras: https://claude.ai/share/4d7dd9ed-3fc0-4d70-8aa1-152e76c1f8d9
