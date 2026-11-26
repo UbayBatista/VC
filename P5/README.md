@@ -128,6 +128,8 @@ Al cruzar los registros finales de `evaluation_metrics.csv` y `evaluation_metric
 2. **Eficacia de la geometría angular:** El Modelo 2 logra separar identidades distintas de forma notoria (similitud del coseno media negativa de **`0.0046`** frente a **`0.4494`** en positivos), logrando elevar el **Recall@1 al 49.24 %** y el **Recall@10 al 73.16 %** con una precisión de verificación 1:1 del **92.56 %** y un `AUC` de 0.9736.
 3. **Organización:** la forma en que se configuran los tripletes para el entrenamiento afecta notoriamente al resultado que produce cualquier extractor de características.
 
+---
+
 #### 4. Aspectos a mejorar para obtener un mejor modelo
 
 Pese a que los resultados obtenidos con el segundo modelo fueron satisfactorios para el objetivo que se pretendía alcanzar, el resultado habría experimentado una mejora considerable si se hubieran aplicado los siguientes cambios:
@@ -248,6 +250,15 @@ Con estas funciones, en cada frame se actualiza la posición de los dibujos ancl
 ```python
 lines[i] = to_world(local, frame_ref).astype(np.int32)
 ```
+# Demostraciones
+
+## desCONOCIDOS
+
+https://github.com/user-attachments/assets/1cf3d44c-83be-4d6d-955f-3a5d0fe71965
+
+## Nose dibujarlo
+
+https://github.com/user-attachments/assets/b05ded6a-887e-4237-90ab-2146d126bfd3
 
 # Trabajo individual de cada miembro
 
