@@ -76,7 +76,16 @@ overlay = cv2.imread(found)
 Ambos enfoques entrenan una arquitectura **ResNet-18** para proyectar rostros del dataset CelebA en un espacio vectorial (*embedding*) de 128 dimensiones, pero difieren radicalmente en su formulación matemática y estrategia de aprendizaje:
 
 * **Modelo 1 (Triplet Loss aleatorio):** Utiliza aprendizaje métrico puramente contrastivo sobre ternas (*Anchor*, *Positive*, *Negative*) elegidas al azar, optimizando directamente la distancia euclidiana ($m=0.3$) sin emplear etiquetas de clase globales.
+
+<p align="center">
+    <img src="images/MODELO1.png" width="680">
+</p>
+
 * **Modelo 2 (ArcFace + Batch-Hard Triplet Loss):** Combina un clasificador angular de margen aditivo ($s=30.0$, $m=0.3$) sobre todas las identidades de entrenamiento con Hard Triplet Loss sobre lotes estructurados, aplicando normalización $L_2$ estricta y recortando la imagen sin distorsión geométrica.
+
+<p align="center">
+    <img src="images/MODELO2.png"  width="680">
+</p>
 
 ---
 
@@ -116,7 +125,15 @@ Al cruzar los registros finales de `evaluation_metrics.csv` y `evaluation_metric
 #### 3. Conclusiones clave
 
 1. **Engaño de la *Triplet Accuracy*:** Aunque el Modelo 1 alcanza un **96.06 %** de *Triplet Accuracy* (acierta al comparar un par positivo contra un único negativo aleatorio), su **Recall@1 cae al 16.10 %** al buscar a una persona entre miles de candidatos. Comparar contra un negativo al azar es demasiado fácil y no garantiza fronteras de decisión compactas, ya que el modelo acaba aprendiendo características superficiales no distintivas.
-2. **Eficacia de la geometría angular:** El Modelo 2 logra separar identidades distintas de forma notoria (similitud del coseno media negativa de **`0.0046`** frente a **`0.4494`** en positivos), logrando elevar el **Recall@1 al 49.24 %** y el **Recall@10 al 73.16 %** con una precisión de verificación 1:1 del **92.56 %** y un `AUC` de 0.9736. 
+2. **Eficacia de la geometría angular:** El Modelo 2 logra separar identidades distintas de forma notoria (similitud del coseno media negativa de **`0.0046`** frente a **`0.4494`** en positivos), logrando elevar el **Recall@1 al 49.24 %** y el **Recall@10 al 73.16 %** con una precisión de verificación 1:1 del **92.56 %** y un `AUC` de 0.9736.
+3. **Organización:** la forma en que se configuran los tripletes para el entrenamiento afecta notoriamente al resultado que produce cualquier extractor de características.
+
+#### 4. Aspectos a mejorar para obtener un mejor modelo
+
+Pese a que los resultados obtenidos con el segundo modelo fueron satisfactorios para el objetivo que se pretendía alcanzar, el resultado habría experimentado una mejora considerable si se hubieran aplicado los siguientes cambios:
+
+1. **Curado del dataset:** el dataset utilizado posee una gran cantidad de imágenes, entre las que es frecuente encontrar imágenes mal etiquetadas, con posturas extremas u oclusión, por lo que se dificulta la identificación de algunas identidades.
+2. **Enfoque del entrenamiento**: para evitar que el entorno sea determinante en el resultado de la imagen, sería ideal que, previo al entrenamiento, se extrajeran únicamente las caras de los famosos para buscar parecidos en base a estas
 
 ## Nose dibujarlo
 
