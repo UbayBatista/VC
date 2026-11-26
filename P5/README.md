@@ -5,15 +5,15 @@
 
 # Trabajo realizado
 
-El contenido de esta práctica está compuesto por 3 filtros que utilizan información biométrica, principalmente de la cara. El primero, es un filtro que muestra el famoso con el que compartes mayor parecido; el segundo, te permite dibujar usando la nariz y manejar esos dibujos a tu antojo; y, el tecero, te permite retarte con un compañero a un duelo al más puro estilo del viejo oeste.
+El contenido de esta práctica está compuesto por 3 filtros que utilizan información biométrica, principalmente de la cara. El primero es un filtro que muestra el famoso con el que compartes mayor parecido; el segundo permite dibujar usando la nariz y manejar esos dibujos a tu antojo; y el tercero permite retarse contra un compañero a un duelo al más puro estilo del viejo oeste.
 
 ## desCONOCIDOS
 
-Para este filtro, se entrenó un extractor de características faciales a partir de un ResNet18 sobre el dataset CelebA, mediante triplets loss con un espacio vectorial sobre el que proyectar los rostros. Se explica más a detalle este proceso en la comparativa final, ya que se probaron distintos procedimientos para ver cuál daba mejor resultado.
+Para este filtro, se entrenó un extractor de características faciales a partir de un ResNet18 sobre el dataset CelebA, mediante triplet loss con un espacio vectorial sobre el que proyectar los rostros. Se explica más a detalle este proceso en la comparativa final, ya que se probaron distintos procedimientos para ver cuál daba mejor resultado.
 
-El punto de partida del código es el proporcionado en el repositorio de la asignatura, en el fichero `detectores`. Se optó por el uso de DNN para detectar la cara ya que ofrecía una respuesta muy fluida con menos falsos positivos que los otros modelos presentados. Para el desarrollo de este, se ha realizado un pipeline similar al de la práctica anterior. En primer lugar, el modelo DNN detecta la cara, y se le pasan tanto el frame como el recuadro la función `get_celeba_crop`, que transforma el recorte original en un recorte más similar al que se puede encontrar en el dataset. Esto, con el fin de mejorar la precisión del modelo. Para ello, se calculan el ancho, altura y el centro del recuadro que el primer modelo ha detectado como cara. Luego, se calculan los nuevos alto y ancho, asignando espacio de sobra y atendiendo a las proporciones de las imágenes del dataset, para evitar que se deforme en caso de redimensionarse. Por último, se transforman las coordenadas para garantizar que se encuentran dentro del frame y se retorna el nuevo crop.
+El punto de partida del código es el proporcionado en el repositorio de la asignatura, en el fichero `detectores`. Se optó por el uso de DNN para detectar la cara ya que ofrecía una respuesta muy fluida con menos falsos positivos que los otros modelos presentados. Para el desarrollo de este, se ha realizado un pipeline similar al de la práctica anterior. En primer lugar, el modelo DNN detecta la cara, y se le pasan tanto el frame como el recuadro a la función `get_celeba_crop`, que transforma el recorte original en un recorte más similar al que se puede encontrar en el dataset. Esto, con el fin de mejorar la precisión del modelo. Para ello, se calculan el ancho, altura y el centro del recuadro que el primer modelo ha detectado como cara. Luego, se calculan los nuevos alto y ancho, asignando espacio de sobra y atendiendo a las proporciones de las imágenes del dataset, para evitar que se deforme en caso de redimensionarse. Por último, se transforman las coordenadas para garantizar que se encuentran dentro del frame y se retorna el nuevo crop.
 
-~~~python
+```python
 def get_celeba_crop(frame, box):
     H, W = frame.shape[:2]
     x1, y1, x2, y2 = box
@@ -34,11 +34,11 @@ def get_celeba_crop(frame, box):
     ny2 = int(min(H, cy_shifted + new_h / 2.0))
 
     return frame[ny1:ny2, nx1:nx2], (nx1, ny1, nx2, ny2)
-~~~
+```
 
-Una vez generado el nuevo crop, se le pasa a la función `get_most_similar_famous`. Esta, genera una imagen a partir del rector, que luego transofrma en un tensor que se utilizará para generar el embedding con las características esenciales de la cara en la imagen. Luego, se calcula el producto vectorial de un embedding preentrenado, para obtener resultados más rápidos, obteniendo el famoso más parecido. Por último, se configura la ruta y se añade a una cola circular en la que se almacena el resultado de los últimos 20 frames, de forma en que la imagen que se muestra corresponde a la ruta con mayor cantidad de votaciones: 
+Una vez generado el nuevo crop, se le pasa a la función `get_most_similar_famous`. Esta, genera una imagen a partir del recorte, que luego transofrma en un tensor que se utilizará para generar el embedding con las características esenciales de la cara en la imagen. Luego, se calcula el producto escalar de un embedding preentrenado, para obtener resultados más rápidos, obteniendo el famoso más parecido. Por último, se configura la ruta y se añade a una cola circular en la que se almacena el resultado de los últimos 20 frames, de forma que la imagen que se muestra corresponde a la ruta con mayor cantidad de votaciones: 
 
-~~~python
+```python
 def get_most_similar_famous(face):
     face_rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
     face_image = Image.fromarray(face_rgb)
@@ -58,18 +58,18 @@ def get_most_similar_famous(face):
 
     most_common_route, _ = Counter(votation).most_common(1)[0]
     return most_common_route
-~~~
+```
 
 Una vez obtenida la ruta, se lee la imagen y se sobrepone en el centro de la parte superior del frame:
 
-~~~python
+```python
 overlay = cv2.imread(found)
-    if overlay is not None:
-        h, w = overlay.shape[:2]
-        x = max(0, min((W - w) // 2, W - w))
-        y = max(0, min(20, H - h))
-        frame[y : y + h, x : x + w] = overlay
-~~~
+if overlay is not None:
+    h, w = overlay.shape[:2]
+    x = max(0, min((W - w) // 2, W - w))
+    y = max(0, min(20, H - h))
+    frame[y : y + h, x : x + w] = overlay
+```
 
 ### Comparativa entre modelos
 
@@ -84,7 +84,7 @@ Ambos enfoques entrenan una arquitectura **ResNet-18** para proyectar rostros de
 * **Modelo 2 (ArcFace + Batch-Hard Triplet Loss):** Combina un clasificador angular de margen aditivo ($s=30.0$, $m=0.3$) sobre todas las identidades de entrenamiento con Hard Triplet Loss sobre lotes estructurados, aplicando normalización $L_2$ estricta y recortando la imagen sin distorsión geométrica.
 
 <p align="center">
-    <img src="images/MODELO2.png"  width="680">
+    <img src="images/MODELO2.png" width="680">
 </p>
 
 ---
@@ -133,11 +133,11 @@ Al cruzar los registros finales de `evaluation_metrics.csv` y `evaluation_metric
 Pese a que los resultados obtenidos con el segundo modelo fueron satisfactorios para el objetivo que se pretendía alcanzar, el resultado habría experimentado una mejora considerable si se hubieran aplicado los siguientes cambios:
 
 1. **Curado del dataset:** el dataset utilizado posee una gran cantidad de imágenes, entre las que es frecuente encontrar imágenes mal etiquetadas, con posturas extremas u oclusión, por lo que se dificulta la identificación de algunas identidades.
-2. **Enfoque del entrenamiento**: para evitar que el entorno sea determinante en el resultado de la imagen, sería ideal que, previo al entrenamiento, se extrajeran únicamente las caras de los famosos para buscar parecidos en base a estas
+2. **Enfoque del entrenamiento**: para evitar que el entorno sea determinante en el resultado de la imagen, sería ideal que, previo al entrenamiento, se extrajeran únicamente las caras de los famosos para buscar parecidos a partir de estas.
 
 ## Nose dibujarlo
 
-La premisa del filtro es la siguiente: decórate a ti y a tu entorno mediante dibujos que tú mismo puedes hacer, no obstante, para hacerlo más divertido, tú único pincel será tu nariz. 
+La premisa del filtro es la siguiente: decórate a ti y a tu entorno mediante dibujos que tú mismo puedes hacer, no obstante, para hacerlo más divertido, el único pincel será tu nariz. 
 
 Para el desarrollo de este filtro, se ha partido del código base proporcionado en el repositorio de la asignatura. Se ha usado únicamente mediapipe, por lo que fue necesario descargar las opciones básicas de los modelos de mano y cara. A partir de este código, y con las opciones y landmarkers creados, se separó la lógica en dos bloques diferentes:
 
@@ -145,7 +145,7 @@ Para el desarrollo de este filtro, se ha partido del código base proporcionado 
 
 Para acceder a este modo se debe mantener los ojos cerrados durante 18 frames consecutivos, saliendo de este de la misma forma. Por lo que fue necesario solicitar a la Inteligencia Artificial una función que detectara el parpadeo a partir de la relación entre la distancia vertical entre los párpados y la anchura del ojo.
 
-~~~python
+```python
 def calculate_ear(landmarks, indexes, w, h):
     # Convertir coordenadas normalizadas a píxeles
     pts = np.array([(landmarks[i].x * w, landmarks[i].y * h) for i in indexes])
@@ -158,22 +158,22 @@ def calculate_ear(landmarks, indexes, w, h):
     horiz = np.linalg.norm(pts[0] - pts[3])
 
     return (v1 + v2) / (2.0 * horiz)
-~~~
+```
 
 Una vez dentro del modo, se sigue el landmark de la nariz para dibujar trazos que se almacenan vectorialmente, como una lista de puntos, `current_line`, que se grafica en cada frame:
 
-~~~python
+```python
 cv2.polylines(frame, [np.array(current_line, dtype=np.int32)],
                           isClosed=False, color=(0, 255, 0), thickness=5)
-~~~
+```
 
-Cuando el usuario termina de dibujar, saliendo del modo dibujo, se almacen este dibujo en `lines`, que se muestra también con una función similar a la anterior.
+Cuando el usuario termina de dibujar, saliendo del modo dibujo, se almacena este dibujo en `lines`, que se muestra también con una función similar a la anterior.
 
 ### 2. Gestión de las manos
 
-Cuando no se está dibujando, el usuario puede mover los dibujos, si existen, pudiendo arrastrarlos por la pantalla y colocárselos como accesorios en la cara. Para ello, fue necesario, a partir del landmark de la mano, separar en los landmarks de los dedos índice y pulgar, para el movimiento de pinzar '🤏', la muñeca y los nudillos, para conocer el tamaño de la palma de la mano. Con estos valores, se calcula la distancia euclídea entre los dedos y entre muñeca y nudillos, para obtener la distancia normalizada entre los dedos con respecto al tamaño de la mano, retornando las coordenadas del punto intermedio en el que se 'pellizca' para arrastrar el dibujo. Resultando en la siguiente función:
+Cuando no se está dibujando, el usuario puede mover los dibujos, si existen, pudiendo arrastrarlos por la pantalla y colocárselos como accesorios en la cara. Para ello, fue necesario, a partir del landmark de la mano, separar en los landmarks de los dedos índice y pulgar, para el movimiento de pinzar '🤏', la muñeca y los nudillos, para conocer el tamaño de la palma de la mano. Con estos valores, se calcula la distancia euclídea entre los dedos y entre muñeca y nudillos, para obtener la distancia normalizada entre los dedos con respecto al tamaño de la mano, retornando las coordenadas del punto intermedio en el que se 'pellizca' para arrastrar el dibujo, resultando en la siguiente función:
 
-~~~python
+```python
 def is_user_grabbing(landmarks, w, h, umbral=GRAB_THRESHOLD):
     thumb = landmarks[4]
     forefinger = landmarks[8]
@@ -191,11 +191,11 @@ def is_user_grabbing(landmarks, w, h, umbral=GRAB_THRESHOLD):
     distance = tip_distance / palm_size
 
     return pixel_x, pixel_y, distance < umbral
-~~~
+```
 
-Cuando el usuario intenta agarrar un trazo, se realiza una búsqueda de la línea más próxima en un radio delimitado, de forma en que se retorna el índice de aquella línea cuya distancia euclídea es la menor al punto en que se agarró, si no se encontrara ninguna recta en el radio especificado devolvería `None`:
+Cuando el usuario intenta agarrar un trazo, se realiza una búsqueda de la línea más próxima en un radio delimitado, de forma que se retorna el índice de aquella línea cuya distancia euclídea es la menor al punto en que se agarró, si no se encontrara ninguna recta en el radio especificado devolvería `None`:
 
-~~~python
+```python
 def nearest_line(x, y, radius=SELECT_RADIUS):
     for i, line in enumerate(lines):
         # Distancia euclidiana de (x, y) a todos los puntos del trazo
@@ -203,11 +203,11 @@ def nearest_line(x, y, radius=SELECT_RADIUS):
         if np.min(distancias) < radius:
             return i
     return None
-~~~
+```
 
-Una vez capturada la línea, se considera como línea posible a usar como accesorio, por lo que se almacena en el diccionario `anchors`, que contiene los trazos que siguen a la cara del usuario. Luego, se actualiza la posición y se desplaza el dibujo junto con la mano. Por último, cuando el usuario suelta el dibujo que estaba arrastrando, se llama a la función `release_line`, generada por la IA, que, si está cerca de la cara, en este caso el parámetro frame, lo ancla a la cara aplicando las transformaciones necesarias, como rotaciones, que aplica a partir de la función `rotate`, que genera matrices 2x2 de rotación, o transformando a local las coordenadas mediante la función `to_local`:
+Una vez capturada la línea, se considera como línea posible a usar como accesorio, por lo que se almacena en el diccionario `anchors`, que contiene los trazos que siguen a la cara del usuario. Luego, se actualiza la posición y se desplaza el dibujo junto con la mano. Por último, cuando el usuario suelta el dibujo que estaba arrastrando, se llama a la función `release_line`, generada por la IA, que, si está cerca de la cara, en este caso el parámetro frame, lo ancla a la cara aplicando las transformaciones necesarias, como rotaciones, que aplica a partir de la función `rotation`, que genera matrices 2x2 de rotación, o transformando a local las coordenadas mediante la función `to_local`:
 
-~~~python 
+```python 
 def release_line(i, frame):
     if i is None or i >= len(lines) or frame is None:
         return
@@ -223,11 +223,11 @@ def rotation(angle):
 def to_local(points, frame):
     origin, scale, angle = frame
     return ((points - origin) @ rotation(angle)) / scale
-~~~
+```
 
-Por último, con la asociación de los objetos a la cara es necesario que se actualiza la posición en cada frame para ubicarla sobre la cara, por lo que se crea la variable `frame_ref` a partir de la función `face_frame`, que genera los resultados que utilizan las funciones anteriores, y la próxima. En esta función, se calcula, a partir de los landmark de las comisuras externas de los ojos, la distancia entre los ojos, que es la escala, el origen, que es el punto medio entre el vector que une los ojos, aproximadamente el puente de la nariz, y el ángulo de este vector, para aplicar las transformaciones correspondientes en `to_local` y en `to_world`.
+Por último, con la asociación de los objetos a la cara es necesario que se actualice la posición en cada frame para ubicarla sobre la cara, por lo que se crea la variable `frame_ref` a partir de la función `face_frame`, que genera los resultados que utilizan las funciones anteriores, y la próxima. En esta función, se calcula, a partir de los landmarks de las comisuras externas de los ojos, la distancia entre los ojos, que es la escala, el origen, que es el punto medio entre el vector que une los ojos, aproximadamente el puente de la nariz, y el ángulo de este vector, para aplicar las transformaciones correspondientes en `to_local` y en `to_world`.
 
-~~~python
+```python
 def face_frame(face, w, h):
     a, b = face[33], face[263]
     pa = np.array([a.x * w, a.y * h])
@@ -241,21 +241,21 @@ def face_frame(face, w, h):
 def to_world(local, frame):
     origin, scale, angle = frame
     return origin + scale * (local @ rotation(angle).T)
-~~~
+```
 
 Con estas funciones, en cada frame se actualiza la posición de los dibujos anclados a la cara de la siguiente forma:
 
-~~~python
+```python
 lines[i] = to_world(local, frame_ref).astype(np.int32)
-~~~
+```
 
-## Trabajo individual de cada miembro
+# Trabajo individual de cada miembro
 
 # Ejecución del cuaderno
 
 ## Comandos para crear el environment con lo necesario:
 
-```
+```bash
 conda env create -f environments.yml
 conda activate VC_P5
 ```
@@ -286,7 +286,7 @@ P5
 
 - Para sobreponer la imagen del famoso sobre el frame: https://chatgpt.com/share/6b05e067-ece0-83eb-8341-fe86febccd56
 
-- Para extraer la información de los landmarks de la cara en el primer filtro: https://share.gemini.google/hreKMcZP6LcJ
+- Para extraer la información de los landmarks de la cara en el segundo filtro: https://share.gemini.google/hreKMcZP6LcJ
 
 - Para controlar el parpadeo: https://share.gemini.google/LUzMzPup7coK
 
