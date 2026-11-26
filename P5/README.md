@@ -258,7 +258,7 @@ https://github.com/user-attachments/assets/1cf3d44c-83be-4d6d-955f-3a5d0fe71965
 
 ## Nose dibujarlo
 
-https://github.com/user-attachments/assets/b05ded6a-887e-4237-90ab-2146d126bfd3
+https://github.com/user-attachments/assets/ec981a31-1ab0-4c30-b567-d3b3c8a61f34
 
 # Trabajo individual de cada miembro
 
