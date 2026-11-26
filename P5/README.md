@@ -1,6 +1,6 @@
 # Autores
 
-- [Ubay Antonio Batista Santana](https://github.com/UbayBatista)  
+- [Ubay Antonio Batista Santana](https://github.com/UbayBatista)
 - [Ángel Sergio Reyes Guedes](https://github.com/asergiorg)
 
 # Trabajo realizado
@@ -36,7 +36,7 @@ def get_celeba_crop(frame, box):
     return frame[ny1:ny2, nx1:nx2], (nx1, ny1, nx2, ny2)
 ```
 
-Una vez generado el nuevo crop, se le pasa a la función `get_most_similar_famous`. Esta, genera una imagen a partir del recorte, que luego transofrma en un tensor que se utilizará para generar el embedding con las características esenciales de la cara en la imagen. Luego, se calcula el producto escalar de un embedding preentrenado, para obtener resultados más rápidos, obteniendo el famoso más parecido. Por último, se configura la ruta y se añade a una cola circular en la que se almacena el resultado de los últimos 20 frames, de forma que la imagen que se muestra corresponde a la ruta con mayor cantidad de votaciones: 
+Una vez generado el nuevo crop, se le pasa a la función `get_most_similar_famous`. Esta, genera una imagen a partir del recorte, que luego transofrma en un tensor que se utilizará para generar el embedding con las características esenciales de la cara en la imagen. Luego, se calcula el producto escalar de un embedding preentrenado, para obtener resultados más rápidos, obteniendo el famoso más parecido. Por último, se configura la ruta y se añade a una cola circular en la que se almacena el resultado de los últimos 20 frames, de forma que la imagen que se muestra corresponde a la ruta con mayor cantidad de votaciones:
 
 ```python
 def get_most_similar_famous(face):
@@ -139,7 +139,7 @@ Pese a que los resultados obtenidos con el segundo modelo fueron satisfactorios 
 
 ## Nose dibujarlo
 
-La premisa del filtro es la siguiente: decórate a ti y a tu entorno mediante dibujos que tú mismo puedes hacer, no obstante, para hacerlo más divertido, el único pincel será tu nariz. 
+La premisa del filtro es la siguiente: decórate a ti y a tu entorno mediante dibujos que tú mismo puedes hacer, no obstante, para hacerlo más divertido, el único pincel será tu nariz.
 
 Para el desarrollo de este filtro, se ha partido del código base proporcionado en el repositorio de la asignatura. Se ha usado únicamente mediapipe, por lo que fue necesario descargar las opciones básicas de los modelos de mano y cara. A partir de este código, y con las opciones y landmarkers creados, se separó la lógica en dos bloques diferentes:
 
@@ -209,7 +209,7 @@ def nearest_line(x, y, radius=SELECT_RADIUS):
 
 Una vez capturada la línea, se considera como línea posible a usar como accesorio, por lo que se almacena en el diccionario `anchors`, que contiene los trazos que siguen a la cara del usuario. Luego, se actualiza la posición y se desplaza el dibujo junto con la mano. Por último, cuando el usuario suelta el dibujo que estaba arrastrando, se llama a la función `release_line`, generada por la IA, que, si está cerca de la cara, en este caso el parámetro frame, lo ancla a la cara aplicando las transformaciones necesarias, como rotaciones, que aplica a partir de la función `rotation`, que genera matrices 2x2 de rotación, o transformando a local las coordenadas mediante la función `to_local`:
 
-```python 
+```python
 def release_line(i, frame):
     if i is None or i >= len(lines) or frame is None:
         return
@@ -276,14 +276,21 @@ Para poder ejecutar el cuaderno, el directorio debe tener la siguiente estructur
 ```
 P5
  ├── best_face_embedding_resnet18.pth
+ ├── best_face_embedding_resnet18_arcface.pth
+ ├── best_face_embedding_resnet18.pth
  ├── content
  │   └── datos
  │       └── dataset
  │           ├── identity_CelebA.txt
  │           └── img_align_celeba
+ ├── data
  ├── deploy.prototxt.txt
  ├── environments.yml
+ ├── face_landmarker.task
+ ├── gallery_embeddings_arcface.pt
  ├── gallery_embeddings.pt
+ ├── hand_landmarker.task
+ ├── images
  ├── README.md
  ├── res10_300x300_ssd_iter_140000.caffemodel
  └── VC_P5.ipynb
