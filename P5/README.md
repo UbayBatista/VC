@@ -5,7 +5,7 @@
 
 # Trabajo realizado
 
-El contenido de esta práctica está compuesto por 3 filtros que utilizan información biométrica, principalmente de la cara. El primero es un filtro que muestra el famoso con el que compartes mayor parecido; el segundo permite dibujar usando la nariz y manejar esos dibujos a tu antojo; y el tercero permite retarse contra un compañero a un duelo al más puro estilo del viejo oeste.
+El contenido de esta práctica está compuesto por 3 filtros que utilizan información biométrica, principalmente de la cara. El primero, **desCONOCIDOS**, es un filtro que muestra el famoso con el que compartes mayor parecido; el segundo, **Nose dibujarlo**, permite dibujar usando la nariz y manejar esos dibujos a tu antojo; y el tercero, **Quick Draw**, permite retarse contra un compañero a un duelo al más puro estilo del viejo oeste.
 
 ## desCONOCIDOS
 
@@ -36,7 +36,7 @@ def get_celeba_crop(frame, box):
     return frame[ny1:ny2, nx1:nx2], (nx1, ny1, nx2, ny2)
 ```
 
-Una vez generado el nuevo crop, se le pasa a la función `get_most_similar_famous`. Esta, genera una imagen a partir del recorte, que luego transofrma en un tensor que se utilizará para generar el embedding con las características esenciales de la cara en la imagen. Luego, se calcula el producto escalar de un embedding preentrenado, para obtener resultados más rápidos, obteniendo el famoso más parecido. Por último, se configura la ruta y se añade a una cola circular en la que se almacena el resultado de los últimos 20 frames, de forma que la imagen que se muestra corresponde a la ruta con mayor cantidad de votaciones:
+Una vez generado el nuevo crop, se le pasa a la función `get_most_similar_famous`. Esta, genera una imagen a partir del recorte, que luego transforma en un tensor que se utilizará para generar el embedding con las características esenciales de la cara en la imagen. Luego, se calcula el producto escalar de un embedding preentrenado, para obtener resultados más rápidos, obteniendo el famoso más parecido. Por último, se configura la ruta y se añade a una cola circular en la que se almacena el resultado de los últimos 20 frames, de forma que la imagen que se muestra corresponde a la ruta con mayor cantidad de votaciones:
 
 ```python
 def get_most_similar_famous(face):
@@ -250,6 +250,179 @@ Con estas funciones, en cada frame se actualiza la posición de los dibujos ancl
 ```python
 lines[i] = to_world(local, frame_ref).astype(np.int32)
 ```
+
+## Quick Draw
+
+Un duelo del viejo oeste para dos jugadores que comparten ordenador y cámara. Cada jugador lleva un sombrero y un bigote de cowboy dibujados sobre su cara y, tras la señal de "¡FUEGO!", gana la ronda quien antes haga el gesto indicado. El duelo es al mejor de 3 rondas (gana quien llegue primero a 2 puntos). Todo el filtro está en el cuaderno `VC_P5_quickdraw.ipynb`.
+
+### 1. Modos de juego y controles
+
+En el menú se elige el modo pulsando su número:
+
+| Tecla | Modo | Gesto de la ronda |
+| :---: | :--- | :--- |
+| **1** | Solo beso | Morritos |
+| **2** | Solo cejas | Cejas levantadas |
+| **3** | Solo pistola | Mano en forma de pistola (índice apuntando) |
+| **4** | Aleatorio, avisando antes | Aleatorio. Se anuncia antes de la espera |
+| **5** | Aleatorio, avisando al disparar | Aleatorio. Solo se revela junto al "¡FUEGO!" |
+
+Durante el juego: **R** revancha (al terminar el duelo), **M** vuelve al menú, **L** muestra u oculta los puntos de detección y **Esc** cierra la ventana.
+
+Reglas de cada ronda:
+
+* Si alguien hace el gesto antes del "¡FUEGO!" (en la fase "Prepárense...") es una **salida en falso**: pierde la ronda y el rival suma un punto. Si lo hacen los dos, se repite la ronda.
+* Reaccionar en menos de 0.10 s tras el "¡FUEGO!" también se considera anticipación, porque es prácticamente imposible reaccionar tan rápido.
+* Si los dos empiezan el gesto en el mismo fotograma, hay **empate** y se repite la ronda. Lo mismo ocurre si nadie dispara en 5 s.
+* Si un jugador sale de la cámara durante el anuncio o la espera, la ronda se pausa hasta que vuelve.
+
+### 2. Detección de los jugadores
+
+El frame se voltea horizontalmente (efecto espejo) antes de detectar, y la detección se hace sobre la imagen limpia, antes de aplicar el filtro de color. Se utilizan dos modelos de MediaPipe en modo `VIDEO`:
+
+* **`FaceLandmarker`**: hasta 2 caras, con 478 landmarks y los 52 *blendshapes* (coeficientes de 0 a 1 que indican cuánto está activo cada gesto facial, como `mouthPucker` o `browInnerUp`).
+* **`HandLandmarker`**: hasta 4 manos (cada jugador podría enseñar las dos), con 21 landmarks en píxeles para dibujar y otros 21 en coordenadas 3D reales para medir los dedos sin depender de la orientación de la mano.
+
+Los jugadores se identifican por su posición: las caras se ordenan por la coordenada x de la punta de la nariz, de modo que **J1 es la cara de la izquierda y J2 la de la derecha**.
+
+```python
+# Se asigna el jugador por la posición horizontal de la nariz
+faces.sort(key=lambda f: f["points"][LM_NOSE_TIP][0])
+```
+
+Cada mano se asigna al jugador cuya nariz esté más cerca en horizontal de la muñeca. Se compara solo la x porque la y de la muñeca cambia mucho al jugar y no distingue a un jugador del otro:
+
+```python
+wrist_x = hand["points"][0][0]
+distances = [abs(wrist_x - face["points"][LM_NOSE_TIP][0]) for face in faces]
+assigned[int(np.argmin(distances))].append(hand)
+```
+
+El resultado es una lista de jugadores `{"face": ..., "hands": [...]}` con la que trabaja el resto del código.
+
+### 3. Sombrero y bigote
+
+Ambos accesorios se dibujan por código con OpenCV, una sola vez al arrancar, como imágenes con canal alfa (transparencia): polígonos suavizados con el algoritmo de Chaikin y contorno oscuro para dar un aspecto de dibujo animado. En cada frame se transforman y se superponen a la imagen:
+
+* **Posición**: el sombrero se ancla a la frente y el bigote entre la base de la nariz y el labio superior.
+* **Inclinación**: se calcula con la recta que une las comisuras externas de los ojos.
+* **Tamaño**: proporcional al ancho de la cara, medido en **3D** (x e y, junto con la profundidad z, escalada con el ancho de la imagen para que tenga las mismas unidades que x). Así el sombrero no se encoge al girar la cabeza.
+
+```python
+left = np.array([*pts[LM_FACE_LEFT], depth[LM_FACE_LEFT]])
+right = np.array([*pts[LM_FACE_RIGHT], depth[LM_FACE_RIGHT]])
+width = np.linalg.norm(right - left)
+```
+
+Para superponer cada accesorio sobre la imagen de la cámara se tiene en cuenta su transparencia (canal alfa): donde el dibujo es opaco se ve el sombrero o el bigote, donde es transparente se ve la cámara y en los bordes se combinan los dos colores, lo que evita bordes dentados. Este cálculo no se hace sobre los 640×480 píxeles del frame, sino solo dentro del rectángulo que encierra al sprite ya girado y escalado, lo que reduce el coste de dibujar los accesorios.
+
+### 4. Gestos
+
+Los gestos de la cara se miden con *blendshapes* y un umbral, ajustado con valores medidos en una cámara real:
+
+| Gesto | Blendshape | En reposo | Haciendo el gesto | Umbral |
+| :--- | :--- | :---: | :---: | :---: |
+| Beso | `mouthPucker` | hasta 0.55 | 0.99 - 1.00 | 0.80 |
+| Cejas levantadas | `browInnerUp` | 0.10 - 0.20 | 0.80 - 0.90 | 0.50 |
+
+```python
+def is_kiss(player):
+    return player["face"]["blendshapes"]["mouthPucker"] > KISS_THRESHOLD
+
+def is_brows_up(player):
+    return player["face"]["blendshapes"]["browInnerUp"] > BROWS_UP_THRESHOLD
+```
+
+Se probaron y descartaron el guiño (sus valores se solapaban con los de un parpadeo normal), las mejillas (no se detectaba nada) y la boca abierta (no resultaba divertida).
+
+La **pistola** necesita medir los dedos, y ninguna medida funcionaba por sí sola en todas las orientaciones de la mano, así que se combinan dos con las coordenadas 3D reales:
+
+* **`finger_curl`** (mano de frente): recorrido de los tres tramos del dedo dividido por la distancia directa entre su base y su punta. Un dedo recto da cerca de 1 y uno doblado, bastante más.
+* **`finger_ratios`** (mano de lado): distancia de la punta a la muñeca dividida por la de la articulación media a la muñeca. Un dedo estirado supera 1 y uno doblado queda por debajo.
+
+```python
+def is_pistol(player):
+    others = ("middle", "ring", "pinky")
+
+    for hand in player["hands"]:
+        curl = finger_curl(hand)
+        ratio = finger_ratios(hand)
+
+        # De frente: el índice está recto y los otros tres claramente doblados
+        front = (curl["index"] < FINGER_STRAIGHT_MAX
+                 and all(curl[name] > FINGER_CURLED_MIN for name in others))
+
+        # De lado: el índice se aleja de la muñeca mucho más que el resto
+        side = (ratio["index"] > FINGER_EXTENDED_RATIO
+                and ratio["index"] - max(ratio[name] for name in others) > POINTING_MARGIN)
+
+        if front or side:
+            return True
+    return False
+```
+
+Para evitar falsos positivos de un solo frame, la clase `GestureState` exige que el gesto se mantenga 2 frames seguidos. Aun así, devuelve el instante en que el gesto **empezó**, no el de su confirmación, de modo que esos frames de comprobación no penalizan el tiempo de reacción.
+
+### 5. Lógica del juego
+
+La clase `Game` es una máquina de estados que se actualiza en cada frame:
+
+| Estado | Qué ocurre | Termina cuando |
+| :--- | :--- | :--- |
+| **Menú** | Se elige el modo | Se pulsa 1-5 |
+| **Anuncio** (solo modo 4) | Se muestra el gesto de la ronda | Pasan 2.5 s |
+| **Espera** | "Prepárense...", entre 2.5 y 6 s aleatorios. Hacer el gesto aquí es salida en falso | Acaba la espera (pasa a ¡Fuego!) o hay salida en falso (pasa a Resultado) |
+| **¡Fuego!** | Se mide quién empieza antes el gesto | Alguien dispara, hay anticipación, empate o pasan 5 s |
+| **Resultado** | Se muestra el ganador y el tiempo de reacción durante 3 s | Siguiente ronda o fin del duelo |
+| **Fin del duelo** | Gana quien llega a 2 puntos | R (revancha) o M (menú) |
+
+La decisión del estado "¡Fuego!" separa a quienes se anticipan de quienes disparan y gana el instante de inicio más temprano:
+
+```python
+limit = self.draw_time + MIN_REACTION_SECONDS
+cheaters = [i for i in range(2) if fired[i] is not None and fired[i] < limit]
+shooters = [i for i in range(2) if fired[i] is not None and fired[i] >= limit]
+```
+
+### 6. Ambientación y efectos
+
+Una vez hecha la detección se aplica un filtro de ambiente: tono **sepia** mezclado con la imagen original y esquinas oscurecidas (viñeteado), más partículas de **polvo** arrastradas por el viento y una **bola de paja** que cruza la pantalla de vez en cuando.
+
+```python
+sepia = cv2.transform(frame, SEPIA_MATRIX)
+mixed = cv2.addWeighted(frame, 1 - SEPIA_STRENGTH, sepia, SEPIA_STRENGTH, 0)
+return cv2.multiply(mixed, self.vignette, scale=1 / 255)
+```
+
+Al ganar una ronda se produce un destello blanco y una explosión con el texto "¡BANG!" junto a la cara de quien ha disparado, y el sombrero del perdedor sale despedido con gravedad y rotación. Quien pierde el duelo se queda sin sombrero en la pantalla final. Cuando hay una salida en falso, el sombrero de quien se adelanta (o de los dos, si ambos lo hacen) también sale despedido, pero sin explosión.
+
+### 7. Sonido
+
+Los sonidos se sintetizan por código con NumPy al arrancar, se guardan como WAV en la carpeta temporal del sistema y se reproducen con `winsound`, que solo permite un sonido a la vez (cada momento del juego tiene uno propio):
+
+| Momento | Sonido |
+| :--- | :--- |
+| Anuncio del gesto (modo 4) | Dos notas agudas |
+| Espera | Dos clics de revólver |
+| ¡Fuego! | Campana metálica |
+| Gana una ronda | Disparo (chasquido, estampido y golpe grave) |
+| Salida en falso | Zumbador descendente |
+| Empate o nadie dispara | Dos notas suaves que bajan |
+| Fin del duelo | Fanfarria |
+| Menú y, tras la fanfarria, fin del duelo | Música de fondo en bucle |
+
+La **música de fondo** está compuesta para el filtro: un bajo al galope, un trémolo de guitarra (cuerda pulsada con el algoritmo de Karplus-Strong) y una melodía silbada. Al empezar una ronda se corta sola, porque cualquier otro sonido sustituye al anterior.
+
+### 8. Requisitos y compatibilidad
+
+El cuaderno necesita `face_landmarker.task` y `hand_landmarker.task` en su carpeta, que ya están en la estructura indicada más abajo. Se ejecutan las celdas en orden y la última abre la ventana "Quick Draw".
+
+Se ha desarrollado y probado en **Windows**. En otros sistemas operativos debería poder ejecutarse con pequeños cambios:
+
+* **Fuente**: el texto usa la fuente Arial de Windows (`FONT_PATH = "C:/Windows/Fonts/arial.ttf"`). Hay que sustituir esa ruta por la de una fuente `.ttf` disponible en el sistema.
+* **Cámara**: se abre con `cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)`, un modo exclusivo de Windows. En otros sistemas basta con `cv2.VideoCapture(CAMERA_INDEX)`.
+* **Sonido**: depende de `winsound`, que solo existe en Windows. Si no está disponible, el juego funciona igualmente, pero sin efectos ni música.
+
 # Demostraciones
 
 ## desCONOCIDOS
@@ -260,7 +433,16 @@ https://github.com/user-attachments/assets/1cf3d44c-83be-4d6d-955f-3a5d0fe71965
 
 https://github.com/user-attachments/assets/ec981a31-1ab0-4c30-b567-d3b3c8a61f34
 
+## Quick Draw
+
+[▶ Demo del filtro Quick Draw](https://drive.google.com/file/d/1EyfbkDIsNKDB6spDms9ZR-MnbyLZfGqv/view?usp=sharing)
+
 # Trabajo individual de cada miembro
+
+- desCONOCIDOS: Sergio
+- Nose dibujarlo: Sergio
+- Quick Draw: Ubay
+- README: Ubay y Sergio
 
 # Ejecución del cuaderno
 
@@ -275,7 +457,6 @@ Para poder ejecutar el cuaderno, el directorio debe tener la siguiente estructur
 
 ```
 P5
- ├── best_face_embedding_resnet18.pth
  ├── best_face_embedding_resnet18_arcface.pth
  ├── best_face_embedding_resnet18.pth
  ├── content
@@ -293,7 +474,8 @@ P5
  ├── images
  ├── README.md
  ├── res10_300x300_ssd_iter_140000.caffemodel
- └── VC_P5.ipynb
+ ├── VC_P5.ipynb
+ └── VC_P5_quickdraw.ipynb
 ```
 
 # Fuentes
@@ -313,3 +495,16 @@ P5
 - Para generar el entrenamiento del primer modelo: https://chatgpt.com/share/6b076451-f7a8-83eb-bead-1603b8875e5f
 
 - Para generar el modelo del segundo entrenamiento: https://claude.ai/share/d8502458-ad75-48f8-adc7-0c6b8e80565d
+
+## Asistencia de herramientas de IA en Quick Draw
+
+He utilizado la IA **como asistente** durante todo el desarrollo de Quick Draw, siempre a partir de especificaciones y peticiones concretas. En lugar de enlazar las conversaciones, detallo en qué consistió su ayuda:
+
+- **Toma de decisiones y diseño**: utilicé la IA para evaluar posibles enfoques de implementación, como los modos de juego, los gestos candidatos, la ambientación o la forma de medir cada gesto, y para analizar la viabilidad técnica de cada uno.
+- **Programación**: durante el proyecto se utilizó código generado por la IA a partir de especificaciones y peticiones concretas. Ese código lo revisé, lo comprendí y resolví con ayuda de la IA las dudas que surgieron durante su estudio, como el funcionamiento de los *blendshapes* (con los que se detectan el beso y las cejas) o el cálculo de lo doblado o estirado que está cada dedo (con el que se detecta la pistola). Después lo integré en el cuaderno, lo probé y lo modifiqué cuando fue necesario. Esto incluye la detección y asignación de los jugadores, las reglas de reconocimiento de cada gesto y la lógica del duelo.
+- **Calibración de los gestos**: la IA propuso las medidas y los umbrales de partida, y los ajusté con los valores que obtenía al probar los gestos con la cámara. De esas pruebas salieron los gestos finales (beso, cejas y pistola) y el descarte de otros que no funcionaban bien.
+- **Gráficos y efectos**: el sombrero, el bigote, el filtro sepia, el polvo, la bola de paja, la explosión y el sombrero que sale volando los generó la IA como código, a partir de mis especificaciones. **No me descargué ninguna imagen ni ningún modelo.**
+- **Sonido**: los efectos de sonido y la música de fondo fueron creados por la IA como código, a partir de mis especificaciones sobre qué sonido corresponde a cada momento del juego y el estilo de la música. **No utilicé ningún archivo de audio externo**, por lo que no hay licencias de las que depender.
+- **Depuración**: la IA me ayudó a localizar y corregir errores concretos que fui encontrando al probar el filtro, como un *blendshape* inexistente que daba `KeyError`. Para ello le aporté el mensaje de error, capturas y el código actual. También comprobó la lógica del juego con simulaciones antes de que yo la probara con la cámara.
+- **Revisión final del código**: optimización de la superposición de los accesorios y búsqueda de errores, código no utilizado y comentarios desactualizados.
+- **Documentación**: la IA redactó la explicación de este filtro siguiendo mis especificaciones y bajo mi supervisión. Posteriormente, el texto se revisó y reformuló varias veces hasta alcanzar la redacción final.
